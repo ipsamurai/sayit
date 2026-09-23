@@ -4,21 +4,24 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::{MainThreadMarker, MainThreadOnly, sel};
+use objc2::{MainThreadMarker, sel};
 use objc2_app_kit::{
-    NSApplication, NSBackingStoreType, NSButton, NSLayoutAttribute, NSProgressIndicator,
-    NSStackView, NSTextField, NSUserInterfaceLayoutOrientation, NSView, NSWindow,
-    NSWindowStyleMask,
+    NSApplication, NSBox, NSButton, NSColor, NSFont, NSImage, NSLayoutAttribute,
+    NSProgressIndicator, NSStackView, NSStackViewGravity, NSTabViewController,
+    NSTabViewControllerTabStyle, NSTabViewItem, NSTextField, NSUserInterfaceLayoutOrientation,
+    NSView, NSViewController, NSWindow, NSWindowStyleMask,
 };
-use objc2_foundation::{NSEdgeInsets, NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{NSEdgeInsets, NSSize, NSString};
 
 use super::actions::Actions;
-use super::widgets::{button, checkbox, heading, label, note, progress_bar, stack};
+use super::widgets::{
+    button, card, fixed_width, label, note, progress_bar, semibold, separator, stack, switch,
+};
 use crate::config::Config;
 use crate::daemon::Controls;
 use crate::stt::ModelId;
 
-/// On/off settings shown as checkboxes. The checkbox tag is the index in `ALL`.
+/// On/off settings shown as switches. The switch tag is the index in `ALL`.
 #[derive(Clone, Copy)]
 pub enum Toggle {
     RemoveFillers,
@@ -74,10 +77,16 @@ impl Toggle {
     }
 }
 
-/// The controls of one model in the Speech model section. Button tags are
-/// the model's index in `ModelId::ALL`.
+/// Width of every tab's content; cards and text are laid out to fit it.
+const PANE_WIDTH: f64 = 520.0;
+/// Width inside a card (the card adds 14 pt margins on each side).
+const CARD_INNER: f64 = PANE_WIDTH - 28.0;
+
+/// The controls of one model card. Button tags are the model's index in
+/// `ModelId::ALL`.
 pub struct ModelRow {
     model: ModelId,
+    badge: Retained<NSTextField>,
     status: Retained<NSTextField>,
     progress: Retained<NSProgressIndicator>,
     download: Retained<NSButton>,
@@ -85,7 +94,7 @@ pub struct ModelRow {
     delete: Retained<NSButton>,
 }
 
-/// What the Speech model section shows, besides what's on disk.
+/// What the Models tab shows, besides what's on disk.
 pub struct ModelsState<'a> {
     pub current: ModelId,
     /// The model being downloaded and how far along it is (0 to 1).
@@ -94,7 +103,7 @@ pub struct ModelsState<'a> {
     pub error: Option<&'a (ModelId, String)>,
 }
 
-/// Updates every model row to match what's installed and what's happening.
+/// Updates every model card to match what's installed and what's happening.
 pub fn refresh_models(rows: &[ModelRow], state: &ModelsState) {
     for row in rows {
         let model = row.model;
@@ -107,11 +116,20 @@ pub fn refresh_models(rows: &[ModelRow], state: &ModelsState) {
         let error = state.error.filter(|(m, _)| *m == model).map(|(_, e)| e);
         let size = format!("{} MB", model.download_bytes() / 1_000_000);
 
+        let (badge, color) = if current && installed {
+            ("In use", NSColor::systemGreenColor())
+        } else if model == ModelId::DEFAULT {
+            ("Recommended", NSColor::controlAccentColor())
+        } else {
+            ("", NSColor::secondaryLabelColor())
+        };
+        row.badge.setStringValue(&NSString::from_str(badge));
+        row.badge.setTextColor(Some(&color));
+
         let status = match (progress, error) {
             (Some(p), _) => format!("Downloading… {:.0}% of {size}", p * 100.0),
             (None, Some(e)) => format!("Download failed: {e}"),
-            (None, None) if installed && current => "Downloaded · in use".into(),
-            (None, None) if installed => "Downloaded".into(),
+            (None, None) if installed => format!("Downloaded · {size}"),
             (None, None) => format!("Not downloaded · {size}"),
         };
         row.status.setStringValue(&NSString::from_str(&status));
@@ -126,125 +144,184 @@ pub fn refresh_models(rows: &[ModelRow], state: &ModelsState) {
         row.download.setTitle(&NSString::from_str(title));
         row.download.setHidden(installed && progress.is_none());
         row.download.setEnabled(!busy_elsewhere);
-
-        row.choose
-            .setTitle(&NSString::from_str(if current { "In use" } else { "Use" }));
-        row.choose.setHidden(!installed);
-        row.choose.setEnabled(!current);
-
-        row.delete.setHidden(!installed);
+        row.choose.setHidden(!installed || current);
         // The model in use can't be deleted; choose another one first.
-        row.delete.setEnabled(!current);
+        row.delete.setHidden(!installed || current);
     }
 }
 
-fn model_row(
+/// Builds the window: a toolbar of tabs, like the settings of other Mac apps.
+/// It's created once and hidden rather than released when closed, so
+/// reopening it is instant.
+pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (Retained<NSWindow>, Vec<ModelRow>) {
+    let target: &AnyObject = actions;
+    let (models_pane, rows) = models_pane(mtm, target);
+    let text_pane = text_pane(mtm, target, actions.controls());
+
+    let tabs = NSTabViewController::new(mtm);
+    tabs.setTabStyle(NSTabViewControllerTabStyle::Toolbar);
+    for (label, symbol, pane) in [
+        ("Models", "cpu", &models_pane),
+        ("Text", "textformat", &text_pane),
+    ] {
+        let controller = NSViewController::new(mtm);
+        controller.setView(pane);
+        controller.setTitle(Some(&NSString::from_str(label)));
+        pane.layoutSubtreeIfNeeded();
+        // Same width for every tab, so the window doesn't jump when switching.
+        let height = pane.fittingSize().height;
+        controller.setPreferredContentSize(NSSize::new(PANE_WIDTH + 48.0, height));
+        let item = NSTabViewItem::tabViewItemWithViewController(&controller);
+        item.setLabel(&NSString::from_str(label));
+        item.setImage(
+            NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                &NSString::from_str(symbol),
+                None,
+            )
+            .as_deref(),
+        );
+        tabs.addTabViewItem(&item);
+    }
+
+    let window = NSWindow::windowWithContentViewController(&tabs);
+    window.setStyleMask(NSWindowStyleMask::Titled | NSWindowStyleMask::Closable);
+    // SAFETY: the window is owned by `Retained` handles, so AppKit must not
+    // also release it when it closes.
+    unsafe { window.setReleasedWhenClosed(false) };
+    window.center();
+    (window, rows)
+}
+
+/// A tab's content: a column of views with standard window margins.
+fn pane(mtm: MainThreadMarker, views: &[&NSView]) -> Retained<NSStackView> {
+    let pane = stack(mtm, NSUserInterfaceLayoutOrientation::Vertical, 12.0, views);
+    pane.setEdgeInsets(NSEdgeInsets {
+        top: 20.0,
+        left: 24.0,
+        bottom: 24.0,
+        right: 24.0,
+    });
+    fixed_width(&pane, PANE_WIDTH + 48.0);
+    pane
+}
+
+fn models_pane(
+    mtm: MainThreadMarker,
+    target: &AnyObject,
+) -> (Retained<NSStackView>, Vec<ModelRow>) {
+    let intro = note(
+        mtm,
+        "Choose the speech model sayit uses. Models run entirely on this Mac; \
+         larger ones are more accurate but use more memory.",
+        PANE_WIDTH,
+    );
+    let (cards, rows): (Vec<_>, Vec<_>) = ModelId::ALL
+        .into_iter()
+        .enumerate()
+        .map(|(i, model)| model_card(mtm, target, i, model))
+        .unzip();
+    let footer = note(
+        mtm,
+        "Downloads come from Hugging Face through sayit's bundled script, and every file \
+         is checked against a pinned SHA-256 checksum. After that, sayit works offline.",
+        PANE_WIDTH,
+    );
+    let mut refs: Vec<&NSView> = vec![&intro];
+    refs.extend(cards.iter().map(|card| -> &NSView { card }));
+    refs.push(&footer);
+    (pane(mtm, &refs), rows)
+}
+
+fn model_card(
     mtm: MainThreadMarker,
     target: &AnyObject,
     i: usize,
     model: ModelId,
-) -> (Retained<NSStackView>, ModelRow) {
+) -> (Retained<NSBox>, ModelRow) {
     let tag = i as isize;
-    let name = label(mtm, model.label());
-    name.setFont(Some(&objc2_app_kit::NSFont::boldSystemFontOfSize(12.0)));
     let row = ModelRow {
         model,
-        status: note(mtm, ""),
+        badge: label(mtm, ""),
+        status: label(mtm, ""),
         progress: progress_bar(mtm),
         download: button(mtm, "Download", target, sel!(downloadModel:), tag),
         choose: button(mtm, "Use", target, sel!(useModel:), tag),
         delete: button(mtm, "Delete", target, sel!(deleteModel:), tag),
     };
+    row.badge.setFont(Some(&NSFont::boldSystemFontOfSize(11.0)));
+    row.status.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+    row.status
+        .setTextColor(Some(&NSColor::secondaryLabelColor()));
+    fixed_width(&row.progress, 140.0);
+
     let horizontal = NSUserInterfaceLayoutOrientation::Horizontal;
+    let name = semibold(mtm, model.label());
+    let heading = stack(mtm, horizontal, 8.0, &[&name, &row.badge]);
+    // Leaves room for the widest button group (Use + Delete).
+    let info_width = CARD_INNER - 130.0;
+    let summary = note(mtm, model.summary(), info_width);
+    let status_line = stack(mtm, horizontal, 8.0, &[&row.progress, &row.status]);
+    let info = stack(
+        mtm,
+        NSUserInterfaceLayoutOrientation::Vertical,
+        4.0,
+        &[&heading, &summary, &status_line],
+    );
+    fixed_width(&info, info_width);
+
     let buttons = stack(
         mtm,
         horizontal,
         6.0,
         &[&row.download, &row.choose, &row.delete],
     );
-    let title_line = stack(mtm, horizontal, 12.0, &[&name, &buttons]);
-    row.progress
-        .setFrameSize(objc2_foundation::NSSize::new(160.0, 12.0));
-    let status_line = stack(mtm, horizontal, 8.0, &[&row.progress, &row.status]);
-    let summary = note(mtm, model.summary());
-    let column = stack(
-        mtm,
-        NSUserInterfaceLayoutOrientation::Vertical,
-        3.0,
-        &[&title_line, &summary, &status_line],
-    );
-    (column, row)
+    let content = NSStackView::new(mtm);
+    content.setOrientation(horizontal);
+    content.setAlignment(NSLayoutAttribute::CenterY);
+    content.addView_inGravity(&info, NSStackViewGravity::Leading);
+    content.addView_inGravity(&buttons, NSStackViewGravity::Trailing);
+    // Spanning the full card width is what pushes the buttons to its edge.
+    fixed_width(&content, CARD_INNER);
+    (card(mtm, &content, PANE_WIDTH), row)
 }
 
-/// Builds the window. It's created once and hidden rather than released when
-/// closed, so reopening it is instant.
-pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (Retained<NSWindow>, Vec<ModelRow>) {
-    let target: &AnyObject = actions;
-    let controls = actions.controls();
-
-    let stack = NSStackView::new(mtm);
-    stack.setOrientation(NSUserInterfaceLayoutOrientation::Vertical);
-    stack.setAlignment(NSLayoutAttribute::Leading);
-    stack.setSpacing(6.0);
-    stack.setEdgeInsets(NSEdgeInsets {
-        top: 20.0,
-        left: 24.0,
-        bottom: 24.0,
-        right: 24.0,
-    });
-
-    let add = |view: &NSView, space_after: f64| {
-        stack.addArrangedSubview(view);
-        stack.setCustomSpacing_afterView(space_after, view);
-    };
-    add(&heading(mtm, "Speech model"), 10.0);
-    let mut rows = Vec::new();
-    for (i, model) in ModelId::ALL.into_iter().enumerate() {
-        let (view, row) = model_row(mtm, target, i, model);
-        add(&view, 14.0);
-        rows.push(row);
-    }
-    let where_from = note(
-        mtm,
-        "Models download from Hugging Face through sayit's bundled script, and every \
-         file is checked against a pinned SHA-256 checksum. After that, sayit works offline.",
-    );
-    where_from.setPreferredMaxLayoutWidth(420.0);
-    add(&where_from, 24.0);
-
-    add(&heading(mtm, "Text"), 10.0);
+fn text_pane(
+    mtm: MainThreadMarker,
+    target: &AnyObject,
+    controls: &Controls,
+) -> Retained<NSStackView> {
+    let rows = NSStackView::new(mtm);
+    rows.setOrientation(NSUserInterfaceLayoutOrientation::Vertical);
+    rows.setSpacing(10.0);
     for (i, toggle) in Toggle::ALL.into_iter().enumerate() {
+        if i > 0 {
+            rows.addArrangedSubview(&separator(mtm, CARD_INNER));
+        }
         let on = toggle.flag(controls).load(Ordering::Relaxed);
-        let action = sel!(toggleSetting:);
-        add(
-            &checkbox(mtm, toggle.title(), on, target, action, i as isize),
-            2.0,
+        let texts = stack(
+            mtm,
+            NSUserInterfaceLayoutOrientation::Vertical,
+            3.0,
+            &[
+                &label(mtm, toggle.title()),
+                &note(mtm, toggle.explanation(), CARD_INNER - 70.0),
+            ],
         );
-        let explanation = note(mtm, toggle.explanation());
-        explanation.setPreferredMaxLayoutWidth(400.0);
-        add(&explanation, 14.0);
+        let row = NSStackView::new(mtm);
+        row.setOrientation(NSUserInterfaceLayoutOrientation::Horizontal);
+        row.setAlignment(NSLayoutAttribute::CenterY);
+        row.addView_inGravity(&texts, NSStackViewGravity::Leading);
+        let switch = switch(mtm, on, target, sel!(toggleSetting:), i as isize);
+        row.addView_inGravity(&switch, NSStackViewGravity::Trailing);
+        fixed_width(&row, CARD_INNER);
+        rows.addArrangedSubview(&row);
     }
-
-    let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(460.0, 300.0));
-    let style = NSWindowStyleMask::Titled | NSWindowStyleMask::Closable;
-    // SAFETY: standard NSWindow initializer with a valid frame and style.
-    let window = unsafe {
-        NSWindow::initWithContentRect_styleMask_backing_defer(
-            NSWindow::alloc(mtm),
-            frame,
-            style,
-            NSBackingStoreType::Buffered,
-            false,
-        )
-    };
-    // SAFETY: the window is owned by `Retained` handles, so AppKit must not
-    // also release it when it closes.
-    unsafe { window.setReleasedWhenClosed(false) };
-    window.setTitle(&NSString::from_str("sayit Settings"));
-    window.setContentView(Some(&stack));
-    window.setContentSize(stack.fittingSize());
-    window.center();
-    (window, rows)
+    let intro = note(
+        mtm,
+        "How sayit tidies up and types what you say. Changes apply to your next dictation.",
+        PANE_WIDTH,
+    );
+    pane(mtm, &[&intro, &card(mtm, &rows, PANE_WIDTH)])
 }
 
 /// Brings the window to the front. sayit has no Dock icon, so the app must

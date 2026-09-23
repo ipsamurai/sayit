@@ -56,14 +56,10 @@ impl ModelId {
     /// One line to help choose: languages, memory use, speed and accuracy.
     pub fn summary(self) -> &'static str {
         match self {
-            ModelId::ParakeetV2 => {
-                "English. ~1.2 GB memory. Fastest and most accurate. Recommended."
-            }
-            ModelId::ParakeetV3 => "25 European languages. ~1.2 GB memory. Fast.",
-            ModelId::MoonshineMedium => "English. ~0.9 GB memory. Slower on long dictations.",
-            ModelId::MoonshineSmall => {
-                "English. ~0.65 GB memory. For low-memory machines; less accurate."
-            }
+            ModelId::ParakeetV2 => "English · ~1.2 GB memory · fastest and most accurate",
+            ModelId::ParakeetV3 => "25 European languages · ~1.2 GB memory · fast",
+            ModelId::MoonshineMedium => "English · ~0.9 GB memory · slower on long dictations",
+            ModelId::MoonshineSmall => "English · ~0.65 GB memory · light, less accurate",
         }
     }
 

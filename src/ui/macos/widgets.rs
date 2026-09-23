@@ -4,11 +4,12 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
 use objc2::{MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSButton, NSColor, NSControlStateValueOff, NSControlStateValueOn, NSFont, NSLayoutAttribute,
-    NSMenuItem, NSProgressIndicator, NSProgressIndicatorStyle, NSStackView, NSTextField,
-    NSUserInterfaceLayoutOrientation, NSView,
+    NSBox, NSBoxType, NSButton, NSColor, NSControlSize, NSControlStateValueOff,
+    NSControlStateValueOn, NSFont, NSFontWeightSemibold, NSLayoutAttribute, NSMenuItem,
+    NSProgressIndicator, NSProgressIndicatorStyle, NSStackView, NSSwitch, NSTextField,
+    NSTitlePosition, NSUserInterfaceLayoutOrientation, NSView,
 };
-use objc2_foundation::NSString;
+use objc2_foundation::{NSSize, NSString};
 
 pub fn menu_item(
     mtm: MainThreadMarker,
@@ -37,40 +38,72 @@ pub fn check_state(on: bool) -> isize {
     }
 }
 
-/// A checkbox whose clicks go to `target`'s `action`; `tag` tells them apart.
-pub fn checkbox(
+/// An on/off switch whose changes go to `target`'s `action`; `tag` tells
+/// them apart.
+pub fn switch(
     mtm: MainThreadMarker,
-    title: &str,
     on: bool,
     target: &AnyObject,
     action: Sel,
     tag: isize,
-) -> Retained<NSButton> {
+) -> Retained<NSSwitch> {
+    let switch = NSSwitch::new(mtm);
+    switch.setControlSize(NSControlSize::Small);
+    switch.setState(check_state(on));
+    switch.setTag(tag);
     // SAFETY: `action` is implemented by `target`, which outlives the window.
-    let button = unsafe {
-        NSButton::checkboxWithTitle_target_action(
-            &NSString::from_str(title),
-            Some(target),
-            Some(action),
-            mtm,
-        )
-    };
-    button.setState(check_state(on));
-    button.setTag(tag);
-    button
+    unsafe {
+        switch.setTarget(Some(target));
+        switch.setAction(Some(action));
+    }
+    switch
 }
 
-pub fn heading(mtm: MainThreadMarker, text: &str) -> Retained<NSTextField> {
+/// A rounded, subtly filled panel around `content`, `width` points wide.
+pub fn card(mtm: MainThreadMarker, content: &NSView, width: f64) -> Retained<NSBox> {
+    let card = NSBox::new(mtm);
+    card.setBoxType(NSBoxType::Custom);
+    card.setTitlePosition(NSTitlePosition::NoTitle);
+    card.setCornerRadius(10.0);
+    card.setBorderColor(&NSColor::separatorColor());
+    card.setFillColor(&NSColor::quaternarySystemFillColor());
+    card.setContentViewMargins(NSSize::new(14.0, 14.0));
+    card.setContentView(Some(content));
+    fixed_width(&card, width);
+    card
+}
+
+/// A thin horizontal line between rows in a card.
+pub fn separator(mtm: MainThreadMarker, width: f64) -> Retained<NSBox> {
+    let line = NSBox::new(mtm);
+    line.setBoxType(NSBoxType::Separator);
+    fixed_width(&line, width);
+    line
+}
+
+/// Pins a view's width, so wrapping text inside it lays out predictably.
+pub fn fixed_width(view: &NSView, width: f64) {
+    view.widthAnchor()
+        .constraintEqualToConstant(width)
+        .setActive(true);
+}
+
+/// Semibold 13 pt text for item names, as in System Settings.
+pub fn semibold(mtm: MainThreadMarker, text: &str) -> Retained<NSTextField> {
     let label = NSTextField::labelWithString(&NSString::from_str(text), mtm);
-    label.setFont(Some(&NSFont::boldSystemFontOfSize(13.0)));
+    // SAFETY: reading an immutable AppKit constant that is set at load time.
+    let weight = unsafe { NSFontWeightSemibold };
+    label.setFont(Some(&NSFont::systemFontOfSize_weight(13.0, weight)));
     label
 }
 
-/// Secondary explanatory text under a control.
-pub fn note(mtm: MainThreadMarker, text: &str) -> Retained<NSTextField> {
+/// Secondary explanatory text that wraps at `width` points.
+pub fn note(mtm: MainThreadMarker, text: &str, width: f64) -> Retained<NSTextField> {
     let label = NSTextField::wrappingLabelWithString(&NSString::from_str(text), mtm);
     label.setFont(Some(&NSFont::systemFontOfSize(11.0)));
     label.setTextColor(Some(&NSColor::secondaryLabelColor()));
+    label.setPreferredMaxLayoutWidth(width);
+    fixed_width(&label, width);
     label
 }
 
@@ -91,6 +124,7 @@ pub fn button(
             mtm,
         )
     };
+    button.setControlSize(NSControlSize::Small);
     button.setTag(tag);
     button
 }

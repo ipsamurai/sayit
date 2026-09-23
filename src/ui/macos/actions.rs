@@ -12,7 +12,7 @@ use objc2::runtime::{AnyObject, NSObject};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{
     NSAlert, NSAlertFirstButtonReturn, NSButton, NSControlStateValueOn, NSMenu, NSMenuDelegate,
-    NSMenuItem, NSWindow,
+    NSMenuItem, NSSwitch, NSWindow,
 };
 use objc2_foundation::{NSObjectProtocol, NSString};
 
@@ -129,11 +129,11 @@ define_class!(
         }
 
         #[unsafe(method(toggleSetting:))]
-        fn toggle_setting(&self, checkbox: &NSButton) {
-            let Some(&toggle) = Toggle::ALL.get(checkbox.tag() as usize) else {
+        fn toggle_setting(&self, switch: &NSSwitch) {
+            let Some(&toggle) = Toggle::ALL.get(switch.tag() as usize) else {
                 return;
             };
-            let on = checkbox.state() == NSControlStateValueOn;
+            let on = switch.state() == NSControlStateValueOn;
             toggle.flag(self.controls()).store(on, Ordering::Relaxed);
             save_config(|cfg| *toggle.field(cfg) = on);
         }
