@@ -8,8 +8,9 @@ use objc2_app_kit::{
     NSControlStateValueOn, NSFont, NSFontWeightMedium, NSFontWeightSemibold, NSImage,
     NSImageSymbolConfiguration, NSImageView, NSLayoutAttribute, NSLayoutConstraintOrientation,
     NSMenuItem, NSPopUpButton, NSProgressIndicator, NSProgressIndicatorStyle,
-    NSSegmentSwitchTracking, NSSegmentedControl, NSStackView, NSStackViewDistribution, NSSwitch,
-    NSTextAlignment, NSTextField, NSTitlePosition, NSUserInterfaceLayoutOrientation, NSView,
+    NSSegmentSwitchTracking, NSSegmentedControl, NSStackView, NSStackViewDistribution,
+    NSStackViewGravity, NSSwitch, NSTextAlignment, NSTextField, NSTitlePosition,
+    NSUserInterfaceLayoutOrientation, NSView,
 };
 use objc2_foundation::{NSSize, NSString};
 
@@ -231,13 +232,13 @@ pub fn icon_badge(
     badge.setFillColor(&color.colorWithAlphaComponent(0.16));
     badge.setContentViewMargins(NSSize::new(0.0, 0.0));
     let icon = symbol(mtm, name, size * 0.5, color);
-    let holder = stack(
-        mtm,
-        NSUserInterfaceLayoutOrientation::Vertical,
-        0.0,
-        &[&icon],
-    );
+    // The box stretches this stack to fill the badge. CenterX centres the
+    // icon across it; the Center gravity area centres it top to bottom
+    // (arranged views would otherwise sit at the top).
+    let holder = NSStackView::new(mtm);
+    holder.setOrientation(NSUserInterfaceLayoutOrientation::Vertical);
     holder.setAlignment(NSLayoutAttribute::CenterX);
+    holder.addView_inGravity(&icon, NSStackViewGravity::Center);
     badge.setContentView(Some(&holder));
     fixed_width(&badge, size);
     fixed_height(&badge, size);
