@@ -46,7 +46,7 @@ open target/release/sayit-*.dmg
 2. The **setup assistant** walks you through choosing and downloading a speech model, allowing **Accessibility** and **Microphone** access (with a live green/red checklist), picking your microphone and hotkey, and the text options.
 3. Click into any text field, **hold Right Option** (or your chosen key), and speak. Release, and the text appears.
 
-If you quit partway, setup starts again next time, and the menu bar offers **Continue Setup…**.
+If you close or quit setup partway, the menu bar offers **Continue Setup…**, and setup starts again next time.
 
 The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it opens normally. If you copy it to another Mac, Gatekeeper blocks the first launch: right-click the app and choose **Open**.
 
