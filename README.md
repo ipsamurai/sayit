@@ -7,7 +7,7 @@
 - 🔒 **Private and local.** The app contains no networking code and collects nothing: no account, no sign-up, no telemetry. See [PRIVACY.md](PRIVACY.md).
 - 🎙️ **Audio never touches disk.** It's held in memory only while you speak, then discarded.
 - 🪶 **Light.** It runs on the CPU, with no GPU needed. It uses about 1 GB of RAM while the model is loaded and typically takes 0.1–0.3 s per sentence on an entry-level 8 GB laptop.
-- 🖥️ **Menu-bar app** (macOS) with status, pause, and a microphone picker.
+- 🖥️ **Menu-bar app** (macOS) with status, pause, microphone and model pickers, optional clipboard history, and a setup assistant.
 
 > **Status: early (0.1).** macOS is supported. The Linux code path (Wayland/X11) is written but has **not been tested yet**. English only for now.
 
@@ -42,11 +42,11 @@ cd sayit
 open target/release/sayit-*.dmg
 ```
 
-1. Drag **sayit** into **Applications** and open it. A microphone icon appears in the menu bar; sayit has no Dock icon.
+1. Drag **sayit** into **Applications** and open it.
 2. The **setup assistant** walks you through choosing and downloading a speech model, allowing **Accessibility** and **Microphone** access (with a live green/red checklist), picking your microphone and hotkey, and the text options.
 3. Click into any text field, **hold Right Option** (or your chosen key), and speak. Release, and the text appears.
 
-The menu-bar icon appears once setup is finished. Closing setup partway quits sayit, and setup starts again next time.
+When setup is finished, a microphone icon appears in the menu bar. sayit has no Dock icon unless you choose one in Settings › General. Closing setup partway quits sayit, and setup starts again next time.
 
 The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it opens normally. If you copy it to another Mac, Gatekeeper blocks the first launch: right-click the app and choose **Open**.
 
@@ -103,7 +103,7 @@ Restart sayit after editing the file by hand.
 2. Replace the app in Applications with the new one.
 3. The new build counts as a different app to macOS, so run `tccutil reset Accessibility io.github.ipsamurai.sayit` and allow it again when prompted.
 
-**Uninstall** (if you turned on Start at login, turn it off in Settings › General first):
+**Uninstall** (if you turned on **Autostart**, turn it off in Settings › General first):
 ```sh
 osascript -e 'quit app "sayit"'
 rm -rf /Applications/sayit.app

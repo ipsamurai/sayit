@@ -17,12 +17,19 @@ pub fn data_dir() -> PathBuf {
 /// Creates the data dir if needed, readable only by the user.
 pub fn ensure_data_dir() -> Result<PathBuf> {
     let dir = data_dir();
+    create_private_dir(&dir)?;
+    Ok(dir)
+}
+
+/// Creates `dir` and any missing parents, readable only by the user. On
+/// macOS the config and data dirs are the same folder, so both go through here.
+pub fn create_private_dir(dir: &Path) -> Result<()> {
     let mut builder = DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]
     std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
-    builder.create(&dir)?;
-    Ok(dir)
+    builder.create(dir)?;
+    Ok(())
 }
 
 /// Takes an exclusive lock that lasts as long as the returned file is open.
@@ -67,5 +74,18 @@ mod tests {
         drop(first);
         assert!(super::lock(&path).is_ok());
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_dirs_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("sayit-dir-test-{}", std::process::id()));
+        super::create_private_dir(&dir.join("sayit")).unwrap();
+        for d in [&dir, &dir.join("sayit")] {
+            let mode = std::fs::metadata(d).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o700, "{}", d.display());
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

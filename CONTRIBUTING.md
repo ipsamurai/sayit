@@ -6,8 +6,8 @@ If you build something on top of sayit instead of contributing back, that's fine
 
 ## Ground rules
 
-1. **No network access in the binary.** Don't add HTTP, telemetry, crash reporting or update checks. `cargo tree -e normal | grep -iE 'http|reqwest|hyper|tokio'` must stay empty. Only `scripts/fetch-models.sh` downloads anything.
-2. **Never persist audio or transcripts.** Audio stays in memory. Transcripts may be printed only in verbose mode (`-v`), never written to disk or logs.
+1. **No network access in the binary.** Don't add HTTP, telemetry or crash reporting. `cargo tree -e normal | grep -iE 'http|reqwest|hyper|tokio'` must stay empty. Anything that has to go online, like model downloads, runs through a bundled script using the system's `curl`, and only when the user asks.
+2. **Never persist audio or transcripts.** Audio stays in memory. Transcripts may be printed only in verbose mode (`-v`), never written to disk or logs. The optional clipboard history is memory only.
 3. **Keep it light.** The target is an 8 GB machine running on the CPU: each dictation should finish in well under 0.5 s and use about 1 GB of RAM. Include before-and-after numbers for changes that affect speed or memory (`sayit transcribe --model <m> clip.wav` prints them).
 4. **Justify new dependencies.** Prefer crates that are already in `Cargo.lock`. Every dependency must be MIT, Apache-2.0 or similarly permissive.
 5. **Models must allow any use** (MIT, Apache-2.0, or CC-BY-4.0 with attribution). Pin a source revision and a SHA-256 for every file. See [docs/MODELS.md](docs/MODELS.md).

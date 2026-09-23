@@ -151,7 +151,7 @@ mod platform {
             // Created once at startup: compositors need a moment to pick up
             // a new input device, so creating it per-paste would drop keys.
             let kbd = VirtualDevice::builder()
-                .context("cannot open /dev/uinput (see README: Linux setup)")?
+                .context("cannot open /dev/uinput (see the README's Linux section)")?
                 .name("sayit virtual keyboard")
                 .with_keys(&keys)?
                 .build()?;

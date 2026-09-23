@@ -15,7 +15,7 @@ handy-keys (CGEventTap / evdev) ─► controller ─► cpal mic (open only whi
                                worker: trim silence → Parakeet TDT 0.6B v2 (ONNX int8, CPU)
                                          │
                                          ▼
-                               filler removal (P4) → vault (P3) → injector (+ line break)
+                               filler removal (P4) → clipboard history (memory only) → injector (+ line break)
                                                       macOS: NSPasteboard + CGEvent Cmd+V
                                                       Linux: arboard + uinput Ctrl+V
 ```
@@ -49,17 +49,17 @@ Models with more restrictive terms, such as the NVIDIA Open Model License or non
     - macOS: the DEK sits in the Keychain with a `SecAccessControl` of `.biometryCurrentSet | .or | .devicePasscode`, so Touch ID releases it. A PIN-wrapped copy serves as the fallback.
     - Linux: the DEK is wrapped with a key derived from `HKDF(Argon2id(PIN, salt) ‖ secret-service secret)`. The secret sits in GNOME Keyring or KWallet, so a stolen `vault.bin` can't be brute-forced offline without the unlocked login keyring.
   - The vault locks again after N idle minutes. Plaintext is held in `Zeroizing` buffers, and 5 wrong PINs trigger an exponential backoff.
-  - A `sayit history` CLI shows entries and can copy one, marked concealed. The tray menu gets a history view in P5.
+  - A `sayit history` CLI shows entries and can copy one, marked concealed. The menu bar's Clipboard menu (memory only, done in P5) would then read from the vault.
 - [~] **P4 Text cleanup:**
   - *Done:* filler words (um, uh, erm) are removed, and each take ends with a line break (`newline_after_take`).
   - *Dropped:* voice commands ("new line") and context-aware spacing, which would mean reading other apps' text or processes. They risk false triggers, and the privacy cost outweighs the benefit.
   - *Last:* a personal dictionary. It's deferred because replacements can misfire on similar-sounding phrases, and the model already handles most words.
-- [~] **P5 Tray and overlay:** *Done on macOS:* menu-bar icon for loading, idle, listening, transcribing, paused and error; Pause, Microphone picker, Model picker (shown when there is more than one model) and Quit. *Still to do:* floating "listening" pill, history view, and the Linux tray.
+- [~] **P5 Tray and overlay:** *Done on macOS:* menu-bar icon for loading, idle, listening, transcribing, paused and error; Pause, Microphone and Model pickers, a Clipboard menu of recent dictations (off by default, memory only), Settings (General, Models, Text, Clipboard, Permissions, About) and a first-launch setup assistant. *Still to do:* floating "listening" pill and the Linux tray.
 - [ ] **P6 Optional LLM cleanup:** Qwen3-1.7B Q4 through llama.cpp with Metal, toggled per use. It adds about 1.1 GB of RAM and 0.3–1 s per dictation.
 - [~] **P7 Packaging:** *Done:* macOS `.app` (menu-bar app, optional Dock icon, ad-hoc signed with the Hardened Runtime, own permissions), app icon, drag-to-install `.dmg`, start at login (SMAppService). *Still to do:* an optional stable local signing identity so permissions survive rebuilds, and on Linux an AppImage or `.deb`, a udev `uaccess` rule and a systemd user unit.
 
 ## Known limitations
 - Clipboard restore on Linux keeps plain text only. On macOS all pasteboard types are kept.
-- On macOS, Cmd+V uses the ANSI keycode for V, so non-QWERTY layouts such as Dvorak need a fix in P5.
-- Terminals on Linux paste with Ctrl+Shift+V. A per-app override is planned.
+- On macOS, Cmd+V uses the ANSI keycode for V, so only QWERTY layouts are supported for now.
+- Terminals on Linux paste with Ctrl+Shift+V, so pasting into them doesn't work yet. (Detecting the focused app was ruled out for privacy; see P4.)
 - On Linux, pasted text isn't yet marked as excluded from clipboard-manager history, as it is on macOS.

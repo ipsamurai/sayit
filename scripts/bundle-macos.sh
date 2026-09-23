@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Builds target/release/sayit.app: the release binary, Info.plist, icon and
-# the model download script, ad-hoc signed. Needs no admin rights and writes only inside target/.
-# Models are not bundled: the app downloads them on first run into
-# ~/Library/Application Support/sayit.
+# the model download script, ad-hoc signed. Needs no admin rights and writes
+# only inside target/. Models are not bundled: the app downloads them during
+# setup into ~/Library/Application Support/sayit.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -37,13 +37,13 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleVersion</key>            <string>$VERSION</string>
   <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
   <key>LSMinimumSystemVersion</key>     <string>13.0</string>
-  <!-- Menu-bar only: no Dock icon or app switcher entry. -->
+  <!-- Menu-bar app: no Dock icon unless chosen in Settings › General. -->
   <key>LSUIElement</key>                <true/>
   <key>NSHighResolutionCapable</key>    <true/>
   <!-- Shown in the microphone permission prompt. Without it macOS kills the
        app on first mic access. -->
   <key>NSMicrophoneUsageDescription</key>
-  <string>sayit listens only while you hold the dictation key. Audio is transcribed on this Mac and never saved or sent anywhere.</string>
+  <string>sayit listens only while you dictate. Audio is transcribed on this Mac and never saved or sent anywhere.</string>
 </dict>
 </plist>
 EOF

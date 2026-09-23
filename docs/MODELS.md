@@ -1,6 +1,6 @@
 # Speech models
 
-sayit offers four models. You can download them from **Settings › Speech model** or with `scripts/fetch-models.sh <key>`:
+sayit offers four models. You can download them from **Settings › Models** or with `scripts/fetch-models.sh <key>`:
 
 | Key | Model | Languages | License |
 |---|---|---|---|
@@ -13,7 +13,7 @@ Every file comes from a pinned source, either an exact Hugging Face revision or 
 
 ## Adding a model
 
-1. **`src/stt.rs`:** add a `ModelId` variant and include it in `ALL`. Fill in `key()`, which is the name used in `config.toml` and by the fetch script, plus `label()`, `summary()`, `download_bytes()` (for the progress bar), `dir_name()` and `is_installed()`.
+1. **`src/stt.rs`:** add a `ModelId` variant and include it in `ALL`. Fill in `key()`, which is the name used in `config.toml` and by the fetch script, plus `label()`, `specs()` (shown on the model's card), `download_bytes()` (for the progress bar), `dir_name()` and `is_installed()`.
 2. **`src/stt.rs`:** if the model belongs to a new family, add a `Model` variant with a loader arm and a transcribe arm in `Engine`. [transcribe-rs](https://crates.io/crates/transcribe-rs) (the `onnx` feature, already enabled) also supports Canary, Cohere, SenseVoice and GigaAM, so this needs no new dependencies.
 3. **`scripts/fetch-models.sh`:** add a function that fetches each file from a **pinned** source with its SHA-256, and add it to `AVAILABLE` and the `case`.
 

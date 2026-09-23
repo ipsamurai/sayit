@@ -36,7 +36,7 @@ pub struct Config {
     /// e.g. "OptRight", "Fn", "Ctrl+Alt+Space".
     pub hotkey: String,
     pub mode: Mode,
-    /// Speech model. Currently only "parakeet-v2"; see scripts/fetch-models.sh.
+    /// Speech model key, e.g. "parakeet-v2" (see `stt::ModelId`).
     pub model: ModelId,
     /// Drop hesitation sounds ("um", "uh", "erm") from transcripts.
     pub remove_fillers: bool,
@@ -98,7 +98,7 @@ impl Config {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 let c = Self::default();
                 if let Some(dir) = p.parent() {
-                    std::fs::create_dir_all(dir)?;
+                    crate::paths::create_private_dir(dir)?;
                 }
                 std::fs::write(&p, toml::to_string_pretty(&c)?)?;
                 Ok(c)

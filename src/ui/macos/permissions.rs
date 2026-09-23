@@ -1,4 +1,4 @@
-//! The two permissions sayit needs, for the setup checklist: reading their
+//! The two permissions sayit needs, for the permission checklists: reading their
 //! status and asking for them. Nothing here grants anything by itself; macOS
 //! asks the user.
 

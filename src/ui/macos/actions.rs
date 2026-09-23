@@ -1,4 +1,5 @@
-//! `Actions` receives every click from the menus and the Settings window.
+//! `Actions` receives every click from the menus, the Settings window and
+//! the setup assistant.
 //! AppKit calls back by selector, so this is an Objective-C class defined in
 //! Rust; each method hands off to plain Rust.
 
@@ -246,7 +247,7 @@ define_class!(
             self.refresh_permissions();
         }
 
-        /// Records a second in the background, then reports whether sayit
+        /// Records 1.5 seconds in the background, then reports whether sayit
         /// actually heard anything. The audio is discarded.
         #[unsafe(method(testMicrophone:))]
         fn test_microphone(&self, _sender: Option<&AnyObject>) {
@@ -366,8 +367,8 @@ define_class!(
     }
 
     unsafe impl NSMenuDelegate for Actions {
-        /// Rebuilds a submenu each time it opens, so newly connected
-        /// devices and newly downloaded models show up.
+        /// Rebuilds a submenu each time it opens, so newly connected devices,
+        /// downloaded models and recent dictations show up.
         #[unsafe(method(menuNeedsUpdate:))]
         fn menu_needs_update(&self, menu: &NSMenu) {
             match menu.title().to_string().as_str() {
@@ -471,22 +472,17 @@ impl Actions {
         }
     }
 
-    /// Opens the setup assistant, or brings it back if it's already open.
-    pub fn show_setup(&self) {
-        let mut fresh = false;
+    /// Opens the setup assistant, at launch until it's been finished.
+    pub fn show_setup(&self, cfg: &Config) {
         let setup = self.ivars().setup.get_or_init(|| {
-            fresh = true;
-            let cfg = Config::load().unwrap_or_default();
-            let (setup, rows) = setup::build(self.mtm(), self, &cfg);
+            let (setup, rows) = setup::build(self.mtm(), self, cfg);
             setup
                 .window
                 .setDelegate(Some(ProtocolObject::from_ref(self)));
             self.ivars().model_rows.borrow_mut().extend(rows);
             setup
         });
-        if fresh {
-            setup.go_to(0, self.controls());
-        }
+        setup.go_to(0, self.controls());
         self.refresh_models();
         setup::bring_to_front(self.mtm(), &setup.window);
     }

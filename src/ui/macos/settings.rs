@@ -401,7 +401,7 @@ fn general_pane(
     (pane, hotkey, login_switch, login_note)
 }
 
-/// The fallback when setup was skipped or a permission was later revoked:
+/// The fallback when a permission is missing or was later revoked:
 /// the live checklist, a microphone test that proves sayit really hears you,
 /// and the steps to fix things by hand.
 fn permissions_pane(

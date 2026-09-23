@@ -12,6 +12,8 @@ sayit keeps only these files, all in `~/Library/Application Support/sayit/` on m
 | `models/` | The speech model you downloaded |
 | `sayit.lock` | An empty file that stops two copies of sayit from running |
 
+If you turn on **Autostart** (Settings › General), macOS adds sayit to *System Settings › General › Login Items*. Turning it off removes it.
+
 sayit also asks macOS every 2 seconds whether it still has its two permissions, so it can warn you if one is revoked. That's a local check; nothing is sent anywhere.
 
 **Never stored:**

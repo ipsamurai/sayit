@@ -1,5 +1,5 @@
 //! macOS menu-bar app: a status icon showing what sayit is doing, with Pause,
-//! microphone and model pickers, Settings and Quit. AppKit owns the main
+//! microphone and model pickers, recent dictations, Settings and Quit. AppKit owns the main
 //! thread; the dictation service runs on background threads (see daemon.rs).
 
 mod actions;
@@ -135,7 +135,8 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
     let mtm = MainThreadMarker::new()
         .ok_or_else(|| anyhow::anyhow!("the menu-bar app must run on the main thread"))?;
     let app = NSApplication::sharedApplication(mtm);
-    // Menu-bar only: no Dock icon, no app switcher entry.
+    // No Dock icon or app switcher entry; after setup, `apply_on_close` adds
+    // them if the user chose that.
     app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 
     let controls = Controls::new(&cfg);
@@ -145,7 +146,7 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
     if cfg.setup_complete {
         finish_setup(&actions);
     } else {
-        actions.show_setup();
+        actions.show_setup(&cfg);
     }
     actions.watch_permissions();
     // Kept here for the life of the app: the app, menus and windows hold only
@@ -159,8 +160,6 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
             while !SETUP_DONE.load(Ordering::Relaxed) {
                 std::thread::sleep(Duration::from_millis(250));
             }
-            // Setup may have changed the hotkey or mode.
-            let cfg = Config::load().unwrap_or(cfg);
             // Shows the system prompt once if needed, then waits for it.
             if !daemon::accessibility_trusted(true) {
                 set_state(State::NeedsAccessibility);

@@ -52,7 +52,7 @@ const PAGES: [Page; 7] = [
     Page::Done,
 ];
 
-/// Hotkeys offered in setup (config names). Any other key can still be set
+/// Hotkeys offered in setup and Settings (config names). Any other key can still be set
 /// in config.toml.
 pub const HOTKEYS: [&str; 5] = ["OptRight", "OptLeft", "CmdRight", "CtrlRight", "Fn"];
 
@@ -314,7 +314,7 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions, cfg: &Config) -> (Setup, 
     (setup, rows)
 }
 
-/// Brings a window to the front (sayit has no Dock icon).
+/// Brings a window to the front (a menu-bar app isn't activated by default).
 pub fn bring_to_front(mtm: MainThreadMarker, window: &NSWindow) {
     window.makeKeyAndOrderFront(None);
     // `activate` needs macOS 14; sayit supports 13.

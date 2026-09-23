@@ -21,6 +21,9 @@ All notable changes to sayit are documented here. The format follows [Keep a Cha
 ### Removed
 - The `restore_clipboard` option. sayit always puts your previous clipboard back after pasting.
 
+### Fixed
+- Running `sayit listen` or `sayit transcribe` before anything else created the settings folder readable by other users. It's now always created readable only by you.
+
 ## [0.1.0] - 2026-09-23
 
 The first public release.
