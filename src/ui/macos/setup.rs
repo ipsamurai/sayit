@@ -361,10 +361,9 @@ fn badge(mtm: MainThreadMarker, symbol_name: &str, color: &NSColor) -> Retained<
 
 /// sayit's icon: from the app bundle, or from the repository when running a
 /// development build (which macOS would show with a generic icon).
-fn app_icon(mtm: MainThreadMarker) -> Retained<NSView> {
+pub fn app_icon_image() -> Option<Retained<NSImage>> {
     let exe = std::env::current_exe().ok();
-    let image = exe
-        .as_deref()
+    exe.as_deref()
         .and_then(|e| e.parent())
         .into_iter()
         .flat_map(|d| {
@@ -377,8 +376,11 @@ fn app_icon(mtm: MainThreadMarker) -> Retained<NSView> {
         .and_then(|p| {
             let path = NSString::from_str(&p.to_string_lossy());
             NSImage::initWithContentsOfFile(NSImage::alloc(), &path)
-        });
-    let view = match image {
+        })
+}
+
+fn app_icon(mtm: MainThreadMarker) -> Retained<NSView> {
+    let view = match app_icon_image() {
         Some(image) => NSImageView::imageViewWithImage(&image, mtm),
         None => NSImageView::new(mtm),
     };

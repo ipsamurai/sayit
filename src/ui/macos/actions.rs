@@ -12,23 +12,24 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{
-    NSAlert, NSAlertFirstButtonReturn, NSApplication, NSApplicationDelegate, NSButton, NSColor,
-    NSControlStateValueOn, NSMenu, NSMenuDelegate, NSMenuItem, NSPopUpButton, NSSegmentedControl,
-    NSSwitch, NSWindowDelegate,
+    NSAlert, NSAlertFirstButtonReturn, NSApplication, NSApplicationActivationPolicy,
+    NSApplicationDelegate, NSButton, NSColor, NSControlStateValueOn, NSMenu, NSMenuDelegate,
+    NSMenuItem, NSPopUpButton, NSSegmentedControl, NSSwitch, NSWindow, NSWindowDelegate,
 };
 use objc2_foundation::{NSNotification, NSObjectProtocol, NSString};
 
-use super::permissions;
 use super::settings::{self, ModelRow, ModelsState, SettingsTab, SettingsWindow, Toggle};
 use super::setup::{self, HOTKEYS, Setup, refresh_permissions};
 use super::widgets::check_state;
 use super::{
     DEFAULT_MIC_TAG, MODEL_MENU, fill_mic_menu, fill_model_menu, save_config, with_actions, with_ui,
 };
+use super::{login, permissions};
 use crate::audio;
-use crate::config::{Config, Mode};
+use crate::config::{Config, Mode, OnClose};
 use crate::daemon::Controls;
 use crate::models::{self, Download, Finished};
+use crate::paths;
 use crate::stt::ModelId;
 
 pub struct Ivars {
@@ -45,6 +46,7 @@ pub struct Ivars {
     download: RefCell<Option<(ModelId, Download)>>,
     progress: Cell<f64>,
     last_error: RefCell<Option<(ModelId, String)>>,
+    on_close: Cell<OnClose>,
 }
 
 define_class!(
@@ -139,6 +141,27 @@ define_class!(
                 }
                 self.refresh_models();
             }
+        }
+
+        #[unsafe(method(toggleLogin:))]
+        fn toggle_login(&self, switch: &NSSwitch) {
+            if let Err(e) = login::set(switch.state() == NSControlStateValueOn) {
+                let alert = NSAlert::new(self.mtm());
+                alert.setMessageText(&NSString::from_str("Couldn't change Start at login"));
+                alert.setInformativeText(&NSString::from_str(&e));
+                alert.runModal();
+            }
+            self.refresh_login();
+        }
+
+        #[unsafe(method(chooseOnClose:))]
+        fn choose_on_close(&self, menu: &NSPopUpButton) {
+            let Some(&(on_close, _)) = settings::ON_CLOSE.get(menu.indexOfSelectedItem() as usize)
+            else {
+                return;
+            };
+            self.apply_on_close(on_close);
+            save_config(|cfg| cfg.on_close = on_close);
         }
 
         #[unsafe(method(toggleSetting:))]
@@ -266,18 +289,30 @@ define_class!(
         fn application_will_terminate(&self, _notification: &NSNotification) {
             self.stop_download();
         }
+
+        /// A click on the Dock icon (when shown) opens Settings.
+        #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
+        fn application_should_handle_reopen(&self, _app: &NSApplication, _visible: bool) -> bool {
+            if super::SETUP_DONE.load(Ordering::Relaxed) {
+                self.show_settings();
+            }
+            true
+        }
     }
 
     unsafe impl NSWindowDelegate for Actions {
         /// Closing the setup window quits sayit: nothing runs until setup is
-        /// finished, and it starts again on the next launch.
+        /// finished, and it starts again on the next launch. Closing Settings
+        /// quits too if the user chose that.
         #[unsafe(method(windowWillClose:))]
         fn window_will_close(&self, notification: &NSNotification) {
             let closing = notification.object();
-            let is_setup = self.ivars().setup.get().is_some_and(|setup| {
-                closing.as_deref().is_some_and(|w| std::ptr::eq(w, &**setup.window as &AnyObject))
-            });
-            if is_setup {
+            let is = |window: &NSWindow| {
+                closing.as_deref().is_some_and(|w| std::ptr::eq(w, window as &AnyObject))
+            };
+            let setup = self.ivars().setup.get().is_some_and(|s| is(&s.window));
+            let settings = self.ivars().settings.get().is_some_and(|s| is(&s.window));
+            if setup || (settings && self.ivars().on_close.get() == OnClose::Quit) {
                 NSApplication::sharedApplication(self.mtm()).terminate(None);
             }
         }
@@ -309,6 +344,7 @@ impl Actions {
             download: RefCell::new(None),
             progress: Cell::new(0.0),
             last_error: RefCell::new(None),
+            on_close: Cell::new(OnClose::MenuBar),
         });
         // SAFETY: NSObject's designated initializer, called once on a fresh
         // allocation whose ivars are already set.
@@ -334,12 +370,50 @@ impl Actions {
     pub fn show_settings(&self) {
         let settings = self.ivars().settings.get_or_init(|| {
             let (settings, rows) = settings::build(self.mtm(), self);
+            settings
+                .window
+                .setDelegate(Some(ProtocolObject::from_ref(self)));
             self.ivars().model_rows.borrow_mut().extend(rows);
             settings
         });
         self.refresh_models();
         self.refresh_permissions();
+        self.refresh_login();
         setup::bring_to_front(self.mtm(), &settings.window);
+    }
+
+    pub fn on_close(&self) -> OnClose {
+        self.ivars().on_close.get()
+    }
+
+    /// Remembers what closing Settings does, and shows or hides the Dock icon
+    /// to match. The menu-bar icon stays either way.
+    pub fn apply_on_close(&self, on_close: OnClose) {
+        self.ivars().on_close.set(on_close);
+        let app = NSApplication::sharedApplication(self.mtm());
+        if on_close == OnClose::Dock {
+            app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+            // A development build has no bundle for macOS to take the icon from.
+            if !paths::in_app_bundle() {
+                // SAFETY: a valid NSImage (or nil for the default icon).
+                unsafe { app.setApplicationIconImage(setup::app_icon_image().as_deref()) };
+            }
+        } else {
+            app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+        }
+        // Changing the policy can send the app to the background; keep an
+        // open Settings window in front.
+        if let Some(settings) = self.ivars().settings.get()
+            && settings.window.isVisible()
+        {
+            setup::bring_to_front(self.mtm(), &settings.window);
+        }
+    }
+
+    fn refresh_login(&self) {
+        if let Some(settings) = self.ivars().settings.get() {
+            settings.show_login(login::status());
+        }
     }
 
     pub fn show_settings_tab(&self, tab: SettingsTab) {

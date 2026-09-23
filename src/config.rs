@@ -16,6 +16,20 @@ pub enum Mode {
     Toggle,
 }
 
+/// What closing the Settings window does. The menu-bar icon stays in every
+/// case except `Quit`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OnClose {
+    /// Keep running in the menu bar only.
+    #[default]
+    MenuBar,
+    /// Keep running, with a Dock icon as well.
+    Dock,
+    /// Quit sayit.
+    Quit,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -41,6 +55,8 @@ pub struct Config {
     pub input_device: Option<String>,
     /// Set once the first-launch setup assistant has been finished.
     pub setup_complete: bool,
+    /// "menu-bar", "dock" or "quit".
+    pub on_close: OnClose,
 }
 
 impl Default for Config {
@@ -56,6 +72,7 @@ impl Default for Config {
             max_recording_secs: 300,
             input_device: None,
             setup_complete: false,
+            on_close: OnClose::MenuBar,
         }
     }
 }
@@ -93,5 +110,18 @@ impl Config {
         std::fs::write(&tmp, toml::to_string_pretty(self)?)?;
         std::fs::rename(&tmp, &p).with_context(|| format!("saving {}", p.display()))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn on_close_parses_and_defaults_to_menu_bar() {
+        let cfg: Config = toml::from_str("on_close = \"dock\"").unwrap();
+        assert_eq!(cfg.on_close, OnClose::Dock);
+        let cfg: Config = toml::from_str("").unwrap();
+        assert_eq!(cfg.on_close, OnClose::MenuBar);
     }
 }

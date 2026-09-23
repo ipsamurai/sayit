@@ -56,7 +56,7 @@ Models with more restrictive terms, such as the NVIDIA Open Model License or non
   - *Last:* a personal dictionary. It's deferred because replacements can misfire on similar-sounding phrases, and the model already handles most words.
 - [~] **P5 Tray and overlay:** *Done on macOS:* menu-bar icon for loading, idle, listening, transcribing, paused and error; Pause, Microphone picker, Model picker (shown when there is more than one model) and Quit. *Still to do:* floating "listening" pill, history view, and the Linux tray.
 - [ ] **P6 Optional LLM cleanup:** Qwen3-1.7B Q4 through llama.cpp with Metal, toggled per use. It adds about 1.1 GB of RAM and 0.3–1 s per dictation.
-- [~] **P7 Packaging:** *Done:* macOS `.app` (menu-bar only, ad-hoc signed with the Hardened Runtime, own permissions), app icon, drag-to-install `.dmg`. *Still to do:* start at login, an optional stable local signing identity so permissions survive rebuilds, and on Linux an AppImage or `.deb`, a udev `uaccess` rule and a systemd user unit.
+- [~] **P7 Packaging:** *Done:* macOS `.app` (menu-bar app, optional Dock icon, ad-hoc signed with the Hardened Runtime, own permissions), app icon, drag-to-install `.dmg`, start at login (SMAppService). *Still to do:* an optional stable local signing identity so permissions survive rebuilds, and on Linux an AppImage or `.deb`, a udev `uaccess` rule and a systemd user unit.
 
 ## Known limitations
 - Clipboard restore on Linux keeps plain text only. On macOS all pasteboard types are kept.

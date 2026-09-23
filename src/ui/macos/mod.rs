@@ -3,6 +3,7 @@
 //! thread; the dictation service runs on background threads (see daemon.rs).
 
 mod actions;
+mod login;
 mod permissions;
 mod settings;
 mod setup;
@@ -75,7 +76,9 @@ static SETUP_DONE: AtomicBool = AtomicBool::new(false);
 /// once setup is done; until then the setup window is the whole app.
 fn finish_setup(actions: &Actions) {
     // Setup may have changed the hotkey.
-    let hotkey = Config::load().unwrap_or_default().hotkey;
+    let cfg = Config::load().unwrap_or_default();
+    actions.apply_on_close(cfg.on_close);
+    let hotkey = cfg.hotkey;
     let (item, status_line, fix_permissions) = status_item(actions.mtm(), actions);
     UI.with(|ui| {
         let ui = ui.get_or_init(|| Ui {

@@ -57,7 +57,8 @@ The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it o
 | Dictate | Hold the hotkey (default **Right Option**), speak, release |
 | Pause | Menu bar › **Pause Dictation**. The hotkey is ignored and any take in progress is discarded. |
 | Choose a microphone | Menu bar › **Microphone** |
-| Change settings | Menu bar › **Settings…** (⌘,): Models, Text and Permissions tabs. Changes apply immediately. |
+| Change settings | Menu bar › **Settings…** (⌘,): General, Models, Text and Permissions tabs. Changes apply immediately. |
+| Start at login, Dock icon | Settings › **General**: **Start sayit at login**, and what closing Settings does: keep running in the menu bar (default), keep running with a Dock icon too, or quit. |
 | Check permissions | Settings › **Permissions**: a live checklist, a **Test Microphone** button, and step-by-step fixes. The menu bar shows **Fix Permissions…** if one goes missing. |
 | Quit | Menu bar › **Quit sayit** (⌘Q) |
 
@@ -87,6 +88,7 @@ newline_after_take = true      # each dictation ends with a line break (false: a
 unload_after_idle_mins = 0     # e.g. 10 to free ~1 GB of RAM when idle (reload takes <1 s)
 max_recording_secs = 300       # capped at 3600
 # input_device = "Built-in Microphone"   # unset = system default
+on_close = "menu-bar"          # closing Settings: "menu-bar", "dock" (adds a Dock icon) or "quit"
 ```
 
 Restart sayit after editing the file by hand.
@@ -98,7 +100,7 @@ Restart sayit after editing the file by hand.
 2. Replace the app in Applications with the new one.
 3. The new build counts as a different app to macOS, so run `tccutil reset Accessibility io.github.ipsamurai.sayit` and allow it again when prompted.
 
-**Uninstall:**
+**Uninstall** (if you turned on Start at login, turn it off in Settings › General first):
 ```sh
 osascript -e 'quit app "sayit"'
 rm -rf /Applications/sayit.app
@@ -152,7 +154,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a p
 
 ## Speech model
 
-Choose and download a model in **Settings › Speech model**, or with `./scripts/fetch-models.sh <name>`. Switching models takes effect on your next dictation.
+Choose and download a model in **Settings › Models**, or with `./scripts/fetch-models.sh <name>`. Switching models takes effect on your next dictation.
 
 | Model | Languages | RAM | Speed | Accuracy | Download | License |
 |---|---|---|---|---|---|---|

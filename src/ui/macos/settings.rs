@@ -7,19 +7,20 @@ use objc2::runtime::AnyObject;
 use objc2::{MainThreadMarker, sel};
 use objc2_app_kit::{
     NSBox, NSButton, NSColor, NSFont, NSImage, NSLayoutAttribute, NSProgressIndicator, NSStackView,
-    NSStackViewDistribution, NSStackViewGravity, NSTabViewController, NSTabViewControllerTabStyle,
-    NSTabViewItem, NSTextField, NSUserInterfaceLayoutOrientation, NSView, NSViewController,
-    NSWindow, NSWindowStyleMask,
+    NSStackViewDistribution, NSStackViewGravity, NSSwitch, NSTabViewController,
+    NSTabViewControllerTabStyle, NSTabViewItem, NSTextField, NSUserInterfaceLayoutOrientation,
+    NSView, NSViewController, NSWindow, NSWindowStyleMask,
 };
 use objc2_foundation::{NSEdgeInsets, NSSize, NSString};
 
 use super::actions::Actions;
+use super::login::Login;
 use super::setup::{PermissionRow, permission_card};
 use super::widgets::{
-    button, card, fixed_height, fixed_width, label, note, progress_bar, semibold, separator,
-    spacer, stack, switch,
+    button, card, card_row, check_state, fixed_height, fixed_width, label, note, popup,
+    progress_bar, rows_card, semibold, separator, spacer, stack, switch,
 };
-use crate::config::Config;
+use crate::config::{Config, OnClose};
 use crate::daemon::Controls;
 use crate::stt::ModelId;
 
@@ -72,6 +73,13 @@ impl Toggle {
         }
     }
 }
+
+/// The choices for closing the Settings window, in popup order.
+pub const ON_CLOSE: [(OnClose, &str); 3] = [
+    (OnClose::MenuBar, "Keep running in the menu bar"),
+    (OnClose::Dock, "Keep running, also in the Dock"),
+    (OnClose::Quit, "Quit sayit"),
+];
 
 /// Width of every tab's content; cards and text are laid out to fit it.
 pub const PANE_WIDTH: f64 = 520.0;
@@ -151,6 +159,7 @@ pub fn refresh_models(rows: &[ModelRow], state: &ModelsState) {
 /// reopening it is instant.
 pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<ModelRow>) {
     let target: &AnyObject = actions;
+    let (general_pane, login_switch, login_note) = general_pane(mtm, target, actions.on_close());
     let (models_pane, rows) = models_pane(mtm, target);
     let text_pane = text_pane(mtm, target, actions.controls());
     let (permissions_pane, permission_rows, mic_test) = permissions_pane(mtm, target);
@@ -158,6 +167,7 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<M
     let tabs = NSTabViewController::new(mtm);
     tabs.setTabStyle(NSTabViewControllerTabStyle::Toolbar);
     for (label, symbol, pane) in [
+        ("General", "gearshape", &general_pane),
         ("Models", "cpu", &models_pane),
         ("Text", "textformat", &text_pane),
         ("Permissions", "lock.shield", &permissions_pane),
@@ -190,6 +200,8 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<M
     let settings = SettingsWindow {
         window,
         tabs,
+        login_switch,
+        login_note,
         permission_rows,
         mic_test,
     };
@@ -200,6 +212,8 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<M
 pub struct SettingsWindow {
     pub window: Retained<NSWindow>,
     tabs: Retained<NSTabViewController>,
+    login_switch: Retained<NSSwitch>,
+    login_note: Retained<NSTextField>,
     pub permission_rows: [PermissionRow; 2],
     /// Result of the last microphone test.
     pub mic_test: Retained<NSTextField>,
@@ -209,13 +223,74 @@ impl SettingsWindow {
     pub fn select_tab(&self, tab: SettingsTab) {
         self.tabs.setSelectedTabViewItemIndex(tab as isize);
     }
+
+    /// Shows the login item as macOS reports it (the user can also change it
+    /// in System Settings).
+    pub fn show_login(&self, login: Login) {
+        let text = match login {
+            Login::Unavailable => "Works in the installed sayit.app, not when run from a terminal.",
+            Login::NeedsApproval => "Allow sayit in System Settings › General › Login Items.",
+            Login::On | Login::Off => "Opens sayit in the menu bar when you log in.",
+        };
+        self.login_note.setStringValue(&NSString::from_str(text));
+        self.login_switch.setState(check_state(matches!(
+            login,
+            Login::On | Login::NeedsApproval
+        )));
+        self.login_switch.setEnabled(login != Login::Unavailable);
+    }
 }
 
 /// Tabs in the order they're added in `build`.
 #[derive(Clone, Copy)]
 pub enum SettingsTab {
-    Models = 0,
-    Permissions = 2,
+    Models = 1,
+    Permissions = 3,
+}
+
+/// Start at login, and what closing this window does.
+fn general_pane(
+    mtm: MainThreadMarker,
+    target: &AnyObject,
+    on_close: OnClose,
+) -> (
+    Retained<NSStackView>,
+    Retained<NSSwitch>,
+    Retained<NSTextField>,
+) {
+    let login_switch = switch(mtm, false, target, sel!(toggleLogin:), 0);
+    let login_note = note(mtm, "", CARD_INNER - 70.0);
+    let login = card_row(
+        mtm,
+        None,
+        &label(mtm, "Start sayit at login"),
+        &login_note,
+        Some(&login_switch),
+        CARD_INNER,
+    );
+    let titles = ON_CLOSE.map(|(_, title)| title);
+    let selected = ON_CLOSE.iter().position(|(c, _)| *c == on_close);
+    let choice = popup(
+        mtm,
+        &titles,
+        selected.unwrap_or(0),
+        target,
+        sel!(chooseOnClose:),
+    );
+    let closing = card_row(
+        mtm,
+        None,
+        &label(mtm, "When Settings is closed"),
+        &note(
+            mtm,
+            "Unless you choose Quit, your hotkey keeps working.",
+            CARD_INNER - 250.0,
+        ),
+        Some(&choice),
+        CARD_INNER,
+    );
+    let card = rows_card(mtm, &[&login, &closing], PANE_WIDTH);
+    (pane(mtm, &[&card]), login_switch, login_note)
 }
 
 /// The fallback when setup was skipped or a permission was later revoked:
