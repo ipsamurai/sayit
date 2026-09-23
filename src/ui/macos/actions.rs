@@ -17,6 +17,7 @@ use objc2_app_kit::{
 use objc2_foundation::{NSObjectProtocol, NSString};
 
 use super::settings::{self, ModelRow, ModelsState, Toggle};
+use super::setup::{self, Setup};
 use super::widgets::check_state;
 use super::{
     DEFAULT_MIC_TAG, MODEL_MENU, fill_mic_menu, fill_model_menu, save_config, with_actions, with_ui,
@@ -27,7 +28,12 @@ use crate::stt::ModelId;
 
 pub struct Ivars {
     controls: Arc<Controls>,
-    settings: OnceCell<(Retained<NSWindow>, Vec<ModelRow>)>,
+    /// Shown in the setup assistant's how-to, e.g. "Right Option".
+    hotkey: String,
+    settings: OnceCell<Retained<NSWindow>>,
+    setup: OnceCell<Setup>,
+    /// Model cards in Settings and in the setup assistant, kept in sync.
+    model_rows: RefCell<Vec<ModelRow>>,
     /// At most one model downloads at a time.
     download: RefCell<Option<(ModelId, Download)>>,
     progress: Cell<f64>,
@@ -142,6 +148,27 @@ define_class!(
         fn show_settings_clicked(&self, _sender: Option<&AnyObject>) {
             self.show_settings();
         }
+
+        #[unsafe(method(setupBack:))]
+        fn setup_back(&self, _sender: Option<&AnyObject>) {
+            if let Some(setup) = self.ivars().setup.get() {
+                setup.go_to(setup.current().saturating_sub(1), self.controls());
+            }
+        }
+
+        #[unsafe(method(setupNext:))]
+        fn setup_next(&self, _sender: Option<&AnyObject>) {
+            let Some(setup) = self.ivars().setup.get() else {
+                return;
+            };
+            if !setup.is_last() {
+                setup.go_to(setup.current() + 1, self.controls());
+                return;
+            }
+            save_config(|cfg| cfg.setup_complete = true);
+            setup.window.orderOut(None);
+            super::finish_setup();
+        }
     }
 
     unsafe impl NSObjectProtocol for Actions {}
@@ -161,10 +188,13 @@ define_class!(
 );
 
 impl Actions {
-    pub fn new(mtm: MainThreadMarker, controls: Arc<Controls>) -> Retained<Self> {
+    pub fn new(mtm: MainThreadMarker, controls: Arc<Controls>, hotkey: String) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(Ivars {
             controls,
+            hotkey,
             settings: OnceCell::new(),
+            setup: OnceCell::new(),
+            model_rows: RefCell::new(Vec::new()),
             download: RefCell::new(None),
             progress: Cell::new(0.0),
             last_error: RefCell::new(None),
@@ -191,12 +221,24 @@ impl Actions {
     }
 
     pub fn show_settings(&self) {
-        let (window, _) = self
-            .ivars()
-            .settings
-            .get_or_init(|| settings::build(self.mtm(), self));
+        let window = self.ivars().settings.get_or_init(|| {
+            let (window, rows) = settings::build(self.mtm(), self);
+            self.ivars().model_rows.borrow_mut().extend(rows);
+            window
+        });
         self.refresh_models();
         settings::show(self.mtm(), window);
+    }
+
+    pub fn show_setup(&self) {
+        let setup = self.ivars().setup.get_or_init(|| {
+            let (setup, rows) = setup::build(self.mtm(), self, &self.ivars().hotkey);
+            self.ivars().model_rows.borrow_mut().extend(rows);
+            setup
+        });
+        setup.go_to(0, self.controls());
+        self.refresh_models();
+        setup::show(self.mtm(), setup);
     }
 
     fn download_progress(&self, fraction: f64) {
@@ -222,9 +264,7 @@ impl Actions {
     }
 
     fn refresh_models(&self) {
-        let Some((_, rows)) = self.ivars().settings.get() else {
-            return;
-        };
+        let rows = self.ivars().model_rows.borrow();
         let downloading = self.ivars().download.borrow().as_ref().map(|(m, _)| *m);
         let last_error = self.ivars().last_error.borrow();
         let state = ModelsState {
@@ -232,6 +272,9 @@ impl Actions {
             downloading: downloading.map(|m| (m, self.ivars().progress.get())),
             error: last_error.as_ref(),
         };
-        settings::refresh_models(rows, &state);
+        settings::refresh_models(&rows, &state);
+        if let Some(setup) = self.ivars().setup.get() {
+            setup.refresh(self.controls());
+        }
     }
 }

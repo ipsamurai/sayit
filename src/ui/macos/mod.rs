@@ -4,9 +4,11 @@
 
 mod actions;
 mod settings;
+mod setup;
 mod widgets;
 
 use std::cell::{Cell, OnceCell, RefCell};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -38,6 +40,7 @@ const DEFAULT_MIC_TAG: isize = 1;
 /// What the icon and the status line show.
 #[derive(Clone, Copy, PartialEq)]
 enum State {
+    SettingUp,
     Loading,
     Ready(Status),
     NeedsAccessibility,
@@ -60,6 +63,32 @@ thread_local! {
     static ACTIONS: OnceCell<Retained<Actions>> = const { OnceCell::new() };
 }
 
+/// Set once the setup assistant is finished (or was finished on an earlier
+/// launch). Dictation, and its Accessibility prompt, waits for it.
+static SETUP_DONE: AtomicBool = AtomicBool::new(false);
+
+fn finish_setup() {
+    SETUP_DONE.store(true, Ordering::Relaxed);
+}
+
+/// The configured hotkey as people know it, e.g. "OptRight" -> "Right Option".
+fn hotkey_name(hotkey: &str) -> String {
+    fn side(key: &str) -> &str {
+        match key {
+            "Opt" => "Option",
+            "Cmd" => "Command",
+            "Ctrl" => "Control",
+            other => other,
+        }
+    }
+    for (suffix, prefix) in [("Right", "Right "), ("Left", "Left ")] {
+        if let Some(key) = hotkey.strip_suffix(suffix) {
+            return format!("{prefix}{}", side(key));
+        }
+    }
+    hotkey.replace('+', " + ")
+}
+
 /// Runs `f` with the app's `Actions`. Main thread only; background threads
 /// get here through `DispatchQueue::main()`.
 fn with_actions(f: impl FnOnce(&Actions)) {
@@ -77,25 +106,30 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
     // Menu-bar only: no Dock icon, no app switcher entry.
     app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 
+    let needs_setup = !cfg.setup_complete;
+    if !needs_setup {
+        finish_setup();
+    }
     let controls = Controls::new(&cfg);
-    let actions = Actions::new(mtm, controls.clone());
+    let actions = Actions::new(mtm, controls.clone(), hotkey_name(&cfg.hotkey));
     app.setMainMenu(Some(&main_menu(mtm, &actions)));
     let (item, status_line) = status_item(mtm, &actions);
     // Kept here for the life of the app: menus and windows hold only weak
     // references to it.
+    if needs_setup {
+        actions.show_setup();
+    }
     ACTIONS.with(|a| a.set(actions).ok());
 
-    // Shows the system prompt once if needed; the start thread then waits.
-    let trusted = daemon::accessibility_trusted(true);
     UI.with(|ui| {
         let ui = ui.get_or_init(|| Ui {
             item,
             status_line,
             hotkey: cfg.hotkey.clone(),
-            state: Cell::new(if trusted {
-                State::Loading
+            state: Cell::new(if needs_setup {
+                State::SettingUp
             } else {
-                State::NeedsAccessibility
+                State::Loading
             }),
             paused: Cell::new(false),
             error: RefCell::new(String::new()),
@@ -107,7 +141,12 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
     std::thread::Builder::new()
         .name("sayit-start".into())
         .spawn(move || {
-            if !trusted {
+            while !SETUP_DONE.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(250));
+            }
+            // Shows the system prompt once if needed, then waits for it.
+            if !daemon::accessibility_trusted(true) {
+                set_state(State::NeedsAccessibility);
                 while !daemon::accessibility_trusted(false) {
                     std::thread::sleep(Duration::from_secs(1));
                 }
@@ -229,6 +268,7 @@ fn main_menu(mtm: MainThreadMarker, actions: &Actions) -> Retained<NSMenu> {
 
 fn render(ui: &Ui) {
     let (symbol, text) = match (ui.state.get(), ui.paused.get()) {
+        (State::SettingUp, _) => ("gearshape", "Finish setting up sayit".to_string()),
         (State::Loading, _) => ("hourglass", "Loading model…".to_string()),
         (State::NeedsAccessibility, _) => (
             "exclamationmark.triangle",

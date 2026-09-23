@@ -79,7 +79,7 @@ impl Toggle {
 }
 
 /// Width of every tab's content; cards and text are laid out to fit it.
-const PANE_WIDTH: f64 = 520.0;
+pub const PANE_WIDTH: f64 = 520.0;
 /// Width inside a card (the card adds 14 pt margins on each side).
 const CARD_INNER: f64 = PANE_WIDTH - 28.0;
 
@@ -194,7 +194,7 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (Retained<NSWindow>, V
 }
 
 /// A tab's content: a column of views with standard window margins.
-fn pane(mtm: MainThreadMarker, views: &[&NSView]) -> Retained<NSStackView> {
+pub fn pane(mtm: MainThreadMarker, views: &[&NSView]) -> Retained<NSStackView> {
     let pane = stack(mtm, NSUserInterfaceLayoutOrientation::Vertical, 12.0, views);
     pane.setEdgeInsets(NSEdgeInsets {
         top: 20.0,
@@ -233,7 +233,7 @@ fn models_pane(
     (pane(mtm, &refs), rows)
 }
 
-fn model_card(
+pub fn model_card(
     mtm: MainThreadMarker,
     target: &AnyObject,
     i: usize,

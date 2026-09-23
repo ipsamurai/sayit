@@ -39,6 +39,8 @@ pub struct Config {
     /// = system default. Bluetooth headset mics take ~1 s to start, which
     /// clips the first words.
     pub input_device: Option<String>,
+    /// Set once the first-launch setup assistant has been finished.
+    pub setup_complete: bool,
 }
 
 impl Default for Config {
@@ -53,6 +55,7 @@ impl Default for Config {
             unload_after_idle_mins: 0,
             max_recording_secs: 300,
             input_device: None,
+            setup_complete: false,
         }
     }
 }
