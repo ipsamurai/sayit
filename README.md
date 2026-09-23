@@ -59,7 +59,7 @@ The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it o
 | Change the hotkey | Settings › **General**: pick the key and Hold or Toggle. It works straight away, no restart. |
 | Pause | Menu bar › **Pause Dictation**. The hotkey is ignored and any take in progress is discarded. |
 | Choose a microphone | Menu bar › **Microphone** |
-| Change settings | Menu bar › **Settings…** (⌘,): General, Models, Text, Clipboard and Permissions tabs. Changes apply immediately. |
+| Change settings | Menu bar › **Settings…** (⌘,): General, Models, Text, Clipboard, Permissions and About tabs. Changes apply immediately. |
 | Start at login, Dock icon | Settings › **General**: **Autostart**, and **On close** (what closing Settings does): keep running in the menu bar (default), keep running with a Dock icon too, or quit. |
 | Check permissions | Settings › **Permissions**: a live checklist, a **Test Microphone** button, and step-by-step fixes. The menu bar shows **Fix Permissions…** if one goes missing. |
 | Quit | Menu bar › **Quit sayit** (⌘Q) |
@@ -121,7 +121,7 @@ tccutil reset Microphone io.github.ipsamurai.sayit
 | The hotkey stopped working after a rebuild | macOS still shows sayit as allowed, but the permission belongs to the old build. Run `tccutil reset Accessibility io.github.ipsamurai.sayit`, relaunch, and allow it again. |
 | The menu says "No speech model yet" | Open **Settings** and download a model. Dictation starts as soon as it finishes. |
 | Nothing is pasted in some apps | sayit pastes with ⌘V. Password fields and apps that block synthetic keystrokes won't accept it. |
-| The wrong character is pasted on Dvorak or other non-QWERTY layouts | This is a known limitation, and a fix is planned. |
+| The wrong character is pasted on Dvorak or other non-QWERTY layouts | sayit currently supports QWERTY layouts only. |
 | Dictating into a terminal runs the text as a command | Each dictation ends with a line break, which works like pressing Return. Modern shells (zsh, which is the macOS default, and bash 5.1+) don't run pasted text, but older shells, some SSH sessions and some REPLs do. Set `newline_after_take = false` if you dictate into terminals. |
 | Short or odd words appear when you didn't really speak | Speak for at least half a second. Very short or near-silent takes can produce stray words. |
 

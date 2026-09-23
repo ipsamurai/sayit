@@ -6,16 +6,16 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{MainThreadMarker, sel};
 use objc2_app_kit::{
-    NSBox, NSButton, NSColor, NSFont, NSImage, NSProgressIndicator, NSStackView,
-    NSStackViewDistribution, NSSwitch, NSTabViewController, NSTabViewControllerTabStyle,
-    NSTabViewItem, NSTextField, NSUserInterfaceLayoutOrientation, NSView, NSViewController,
-    NSWindow, NSWindowStyleMask,
+    NSBox, NSButton, NSColor, NSFont, NSImage, NSImageView, NSLayoutAttribute, NSProgressIndicator,
+    NSStackView, NSStackViewDistribution, NSSwitch, NSTabViewController,
+    NSTabViewControllerTabStyle, NSTabViewItem, NSTextAlignment, NSTextField,
+    NSUserInterfaceLayoutOrientation, NSView, NSViewController, NSWindow, NSWindowStyleMask,
 };
 use objc2_foundation::{NSEdgeInsets, NSSize, NSString};
 
 use super::actions::Actions;
 use super::login::Login;
-use super::setup::{HotkeyPicker, PermissionRow, hotkey_card, permission_card};
+use super::setup::{HotkeyPicker, PermissionRow, app_icon_image, hotkey_card, permission_card};
 use super::widgets::{
     button, card, card_row, check_state, fixed_height, fixed_width, label, note, popup,
     progress_bar, rows_card, semibold, spacer, stack, switch,
@@ -85,6 +85,36 @@ pub const ON_CLOSE: [(OnClose, &str); 3] = [
     (OnClose::MenuBar, "Keep running in the menu bar"),
     (OnClose::Dock, "Keep running, also in the Dock"),
     (OnClose::Quit, "Quit sayit"),
+];
+
+/// The About tab's links: name, description, address. Buttons carry the
+/// index as their tag, so only these fixed addresses can ever be opened.
+pub const LINKS: [(&str, &str, &str); 5] = [
+    (
+        "Help",
+        "Fixes for common problems.",
+        "https://github.com/ipsamurai/sayit#troubleshooting",
+    ),
+    (
+        "Report bug",
+        "Opens a new issue on GitHub.",
+        "https://github.com/ipsamurai/sayit/issues/new/choose",
+    ),
+    (
+        "Source code",
+        "sayit is open source on GitHub.",
+        "https://github.com/ipsamurai/sayit",
+    ),
+    (
+        "Privacy",
+        "What sayit keeps, and what it never does.",
+        "https://github.com/ipsamurai/sayit/blob/main/PRIVACY.md",
+    ),
+    (
+        "Disclaimer",
+        "sayit is provided as is, without warranty.",
+        "https://github.com/ipsamurai/sayit/blob/main/DISCLAIMER.md",
+    ),
 ];
 
 /// Choices for how many recent dictations to keep.
@@ -175,6 +205,7 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<M
     let text_pane = text_pane(mtm, target, controls);
     let clipboard_pane = clipboard_pane(mtm, target, controls, &cfg);
     let (permissions_pane, permission_rows, mic_test) = permissions_pane(mtm, target);
+    let about_pane = about_pane(mtm, target);
 
     let tabs = NSTabViewController::new(mtm);
     tabs.setTabStyle(NSTabViewControllerTabStyle::Toolbar);
@@ -184,6 +215,7 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<M
         ("Text", "textformat", &text_pane),
         ("Clipboard", "doc.on.clipboard", &clipboard_pane),
         ("Permissions", "lock.shield", &permissions_pane),
+        ("About", "info.circle", &about_pane),
     ] {
         let controller = NSViewController::new(mtm);
         controller.setView(pane);
@@ -261,6 +293,62 @@ impl SettingsWindow {
 pub enum SettingsTab {
     Models = 1,
     Permissions = 4,
+}
+
+/// Name, version and credits, with links to help and the project's docs.
+fn about_pane(mtm: MainThreadMarker, target: &AnyObject) -> Retained<NSStackView> {
+    let icon = match app_icon_image() {
+        Some(image) => NSImageView::imageViewWithImage(&image, mtm),
+        None => NSImageView::new(mtm),
+    };
+    fixed_width(&icon, 64.0);
+    fixed_height(&icon, 64.0);
+    let name = label(mtm, "sayit");
+    name.setFont(Some(&NSFont::boldSystemFontOfSize(20.0)));
+    let version = note(
+        mtm,
+        &format!(
+            "Version {}\nPrivate, local dictation for lower-end devices.",
+            env!("CARGO_PKG_VERSION")
+        ),
+        PANE_WIDTH,
+    );
+    version.setAlignment(NSTextAlignment::Center);
+    let header = stack(
+        mtm,
+        NSUserInterfaceLayoutOrientation::Vertical,
+        6.0,
+        &[&icon, &name, &version],
+    );
+
+    let rows: Vec<_> = LINKS
+        .iter()
+        .enumerate()
+        .map(|(i, (name, detail, _))| {
+            let open = button(mtm, "Open", target, sel!(openLink:), i as isize);
+            card_row(
+                mtm,
+                None,
+                &label(mtm, name),
+                &note(mtm, detail, CARD_INNER - 100.0),
+                Some(&open),
+                CARD_INNER,
+            )
+        })
+        .collect();
+    let refs: Vec<&NSView> = rows.iter().map(|r| -> &NSView { r }).collect();
+    let credits = note(
+        mtm,
+        "© 2026 ipsamurai and the sayit contributors. Licensed under MIT OR Apache-2.0.\n\
+         Speech models: NVIDIA Parakeet (CC-BY-4.0) and Moonshine AI (MIT).",
+        PANE_WIDTH,
+    );
+    let pane = pane(
+        mtm,
+        &[&header, &rows_card(mtm, &refs, PANE_WIDTH), &credits],
+    );
+    pane.setAlignment(NSLayoutAttribute::CenterX);
+    pane
 }
 
 /// The hotkey, start at login, and what closing this window does.
@@ -542,4 +630,19 @@ fn clipboard_pane(
         PANE_WIDTH,
     );
     pane(mtm, &[&intro, &rows_card(mtm, &refs, PANE_WIDTH)])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LINKS;
+
+    #[test]
+    fn about_links_stay_on_the_project() {
+        for (_, _, url) in LINKS {
+            assert!(
+                url.starts_with("https://github.com/ipsamurai/sayit"),
+                "{url}"
+            );
+        }
+    }
 }

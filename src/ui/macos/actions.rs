@@ -15,9 +15,9 @@ use objc2_app_kit::{
     NSAlert, NSAlertFirstButtonReturn, NSApplication, NSApplicationActivationPolicy,
     NSApplicationDelegate, NSButton, NSColor, NSControlStateValueOn, NSMenu, NSMenuDelegate,
     NSMenuItem, NSPasteboard, NSPasteboardTypeString, NSPopUpButton, NSSegmentedControl, NSSwitch,
-    NSWindow, NSWindowDelegate,
+    NSWindow, NSWindowDelegate, NSWorkspace,
 };
-use objc2_foundation::{NSNotification, NSObjectProtocol, NSString};
+use objc2_foundation::{NSNotification, NSObjectProtocol, NSString, NSURL};
 
 use super::settings::{self, ModelRow, ModelsState, SettingsTab, SettingsWindow, Toggle};
 use super::setup::{self, HOTKEYS, Setup, refresh_permissions};
@@ -166,6 +166,17 @@ define_class!(
             };
             self.apply_on_close(on_close);
             save_config(|cfg| cfg.on_close = on_close);
+        }
+
+        /// The About tab's buttons: opens one of the fixed addresses in
+        /// the browser.
+        #[unsafe(method(openLink:))]
+        fn open_link(&self, button: &NSButton) {
+            if let Some((_, _, url)) = settings::LINKS.get(button.tag() as usize)
+                && let Some(url) = NSURL::URLWithString(&NSString::from_str(url))
+            {
+                NSWorkspace::sharedWorkspace().openURL(&url);
+            }
         }
 
         #[unsafe(method(chooseHistorySize:))]

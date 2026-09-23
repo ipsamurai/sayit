@@ -15,6 +15,7 @@ All notable changes to sayit are documented here. The format follows [Keep a Cha
 - Clipboard history (off by default; turn it on in setup or Settings › Clipboard): the last 3, 5 or 10 dictations, kept in memory only, in the menu bar's Clipboard menu. Click one to copy it; Clear forgets them.
 - Settings › General: change the hotkey and Hold/Toggle mode while sayit runs, with no restart.
 - Settings › General: **Autostart** (start at login, through macOS's login items; the installed app only), and a choice of what closing Settings does: keep running in the menu bar, keep running with a Dock icon too, or quit (`on_close` in config.toml).
+- Settings › About: version, credits, and links to help, bug reports, the source code, the privacy notes and the disclaimer.
 - Settings › Permissions: live checklist, Test Microphone (records 1.5 seconds in memory and reports whether it heard you), and manual steps. The menu bar shows Fix Permissions… when macOS reports a permission missing.
 
 ### Removed
