@@ -256,33 +256,57 @@ fn model_card(
 
     let horizontal = NSUserInterfaceLayoutOrientation::Horizontal;
     let name = semibold(mtm, model.label());
-    let heading = stack(mtm, horizontal, 8.0, &[&name, &row.badge]);
-    // Leaves room for the widest button group (Use + Delete).
-    let info_width = CARD_INNER - 130.0;
-    let summary = note(mtm, model.summary(), info_width);
-    let status_line = stack(mtm, horizontal, 8.0, &[&row.progress, &row.status]);
-    let info = stack(
-        mtm,
-        NSUserInterfaceLayoutOrientation::Vertical,
-        4.0,
-        &[&heading, &summary, &status_line],
-    );
-    fixed_width(&info, info_width);
-
     let buttons = stack(
         mtm,
         horizontal,
         6.0,
         &[&row.download, &row.choose, &row.delete],
     );
-    let content = NSStackView::new(mtm);
-    content.setOrientation(horizontal);
-    content.setAlignment(NSLayoutAttribute::CenterY);
-    content.addView_inGravity(&info, NSStackViewGravity::Leading);
-    content.addView_inGravity(&buttons, NSStackViewGravity::Trailing);
-    // Spanning the full card width is what pushes the buttons to its edge.
-    fixed_width(&content, CARD_INNER);
+    // Top line: name and badge on the left, buttons on the right. Spanning
+    // the full card width is what pushes the buttons to its edge.
+    let top = NSStackView::new(mtm);
+    top.setOrientation(horizontal);
+    top.setAlignment(NSLayoutAttribute::CenterY);
+    let heading = stack(mtm, horizontal, 8.0, &[&name, &row.badge]);
+    top.addView_inGravity(&heading, NSStackViewGravity::Leading);
+    top.addView_inGravity(&buttons, NSStackViewGravity::Trailing);
+    fixed_width(&top, CARD_INNER);
+
+    let status_line = stack(mtm, horizontal, 8.0, &[&row.progress, &row.status]);
+    let content = stack(
+        mtm,
+        NSUserInterfaceLayoutOrientation::Vertical,
+        6.0,
+        &[&top, &specs_line(mtm, model), &status_line],
+    );
     (card(mtm, &content, PANE_WIDTH), row)
+}
+
+/// "Languages English | RAM 1.2 GB | Speed … | Accuracy …", with the field
+/// names dimmed so the values stand out.
+fn specs_line(mtm: MainThreadMarker, model: ModelId) -> Retained<NSStackView> {
+    let line = NSStackView::new(mtm);
+    line.setOrientation(NSUserInterfaceLayoutOrientation::Horizontal);
+    line.setSpacing(5.0);
+    for (i, (name, value)) in model.specs().into_iter().enumerate() {
+        if i > 0 {
+            line.addArrangedSubview(&small_label(mtm, "|", NSColor::tertiaryLabelColor()));
+        }
+        line.addArrangedSubview(&small_label(mtm, name, NSColor::secondaryLabelColor()));
+        line.addArrangedSubview(&small_label(mtm, value, NSColor::labelColor()));
+    }
+    line
+}
+
+fn small_label(
+    mtm: MainThreadMarker,
+    text: &str,
+    color: Retained<NSColor>,
+) -> Retained<NSTextField> {
+    let field = label(mtm, text);
+    field.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+    field.setTextColor(Some(&color));
+    field
 }
 
 fn text_pane(

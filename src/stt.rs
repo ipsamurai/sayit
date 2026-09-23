@@ -53,14 +53,21 @@ impl ModelId {
         }
     }
 
-    /// One line to help choose: languages, memory use, speed and accuracy.
-    pub fn summary(self) -> &'static str {
-        match self {
-            ModelId::ParakeetV2 => "English · ~1.2 GB memory · fastest and most accurate",
-            ModelId::ParakeetV3 => "25 European languages · ~1.2 GB memory · fast",
-            ModelId::MoonshineMedium => "English · ~0.9 GB memory · slower on long dictations",
-            ModelId::MoonshineSmall => "English · ~0.65 GB memory · light, less accurate",
-        }
+    /// What to compare when choosing, from our benchmarks on an 8 GB laptop
+    /// (see PLAN.md): languages, memory in use, speed and accuracy.
+    pub fn specs(self) -> [(&'static str, &'static str); 4] {
+        let (languages, ram, speed, accuracy) = match self {
+            ModelId::ParakeetV2 => ("English", "1.2 GB", "Very fast", "Highest"),
+            ModelId::ParakeetV3 => ("25 European", "1.2 GB", "Very fast", "High"),
+            ModelId::MoonshineMedium => ("English", "0.9 GB", "Moderate", "Good"),
+            ModelId::MoonshineSmall => ("English", "0.65 GB", "Fast", "Fair"),
+        };
+        [
+            ("Languages", languages),
+            ("RAM", ram),
+            ("Speed", speed),
+            ("Accuracy", accuracy),
+        ]
     }
 
     /// Total download size, for the progress bar.

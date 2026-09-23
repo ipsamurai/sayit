@@ -150,14 +150,14 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a p
 
 Choose and download a model in **Settings › Speech model**, or with `./scripts/fetch-models.sh <name>`. Switching models takes effect on your next dictation.
 
-| Model | Languages | Download | Memory | Notes | License |
-|---|---|---|---|---|---|
-| **Parakeet v2** (default) | English | 660 MB | ~1.2 GB | Fastest and most accurate in our tests | [CC-BY-4.0](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (NVIDIA) |
-| Parakeet v3 | 25 European | 670 MB | ~1.2 GB | For dictating in other languages | [CC-BY-4.0](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (NVIDIA) |
-| Moonshine Medium | English | 200 MB | ~0.9 GB | Slower on long dictations | [MIT](https://github.com/moonshine-ai/moonshine) (Moonshine AI) |
-| Moonshine Small | English | 105 MB | ~0.65 GB | For low-memory machines; less accurate | [MIT](https://github.com/moonshine-ai/moonshine) (Moonshine AI) |
+| Model | Languages | RAM | Speed | Accuracy | Download | License |
+|---|---|---|---|---|---|---|
+| **Parakeet v2** (default) | English | 1.2 GB | Very fast | Highest | 660 MB | [CC-BY-4.0](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (NVIDIA) |
+| Parakeet v3 | 25 European | 1.2 GB | Very fast | High | 670 MB | [CC-BY-4.0](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (NVIDIA) |
+| Moonshine Medium | English | 0.9 GB | Moderate | Good | 200 MB | [MIT](https://github.com/moonshine-ai/moonshine) (Moonshine AI) |
+| Moonshine Small | English | 0.65 GB | Fast | Fair | 105 MB | [MIT](https://github.com/moonshine-ai/moonshine) (Moonshine AI) |
 
-The benchmark behind these notes is in [PLAN.md](PLAN.md#model-choice-entry-level-8-gb-laptop-cpu-only). Models aren't part of this repository: they're downloaded from Hugging Face and each file is checked against a pinned SHA-256 checksum. If you redistribute a model, follow its license. [docs/MODELS.md](docs/MODELS.md) explains how to add others.
+The benchmark behind these ratings is in [PLAN.md](PLAN.md#model-choice-entry-level-8-gb-laptop-cpu-only). Models aren't part of this repository: they're downloaded from Hugging Face and each file is checked against a pinned SHA-256 checksum. If you redistribute a model, follow its license. [docs/MODELS.md](docs/MODELS.md) explains how to add others.
 
 ## Contributing
 
