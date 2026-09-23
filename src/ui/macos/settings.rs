@@ -87,35 +87,52 @@ pub const ON_CLOSE: [(OnClose, &str); 3] = [
     (OnClose::Quit, "Quit sayit"),
 ];
 
-/// The About tab's links: name, description, address. Buttons carry the
-/// index as their tag, so only these fixed addresses can ever be opened.
-pub const LINKS: [(&str, &str, &str); 5] = [
+/// What an About tab button opens.
+pub enum Link {
+    /// A page, in the browser.
+    Web(&'static str),
+    /// THIRD-PARTY-NOTICES.txt inside sayit.app.
+    Notices,
+}
+
+/// The About tab's rows: name, description, target. Buttons carry the index
+/// as their tag, so only these fixed targets can ever be opened.
+pub const LINKS: [(&str, &str, Link); 6] = [
     (
         "Help",
         "Fixes for common problems.",
-        "https://github.com/ipsamurai/sayit#troubleshooting",
+        Link::Web("https://github.com/ipsamurai/sayit#troubleshooting"),
     ),
     (
         "Report bug",
         "Opens a new issue on GitHub.",
-        "https://github.com/ipsamurai/sayit/issues/new/choose",
+        Link::Web("https://github.com/ipsamurai/sayit/issues/new/choose"),
     ),
     (
         "Source code",
         "sayit is open source on GitHub.",
-        "https://github.com/ipsamurai/sayit",
+        Link::Web("https://github.com/ipsamurai/sayit"),
     ),
     (
         "Privacy",
         "What sayit keeps, and what it never does.",
-        "https://github.com/ipsamurai/sayit/blob/main/PRIVACY.md",
+        Link::Web("https://github.com/ipsamurai/sayit/blob/main/PRIVACY.md"),
     ),
     (
         "Disclaimer",
         "sayit is provided as is, without warranty.",
-        "https://github.com/ipsamurai/sayit/blob/main/DISCLAIMER.md",
+        Link::Web("https://github.com/ipsamurai/sayit/blob/main/DISCLAIMER.md"),
+    ),
+    (
+        "Licenses",
+        "The open-source software inside sayit, and its licenses.",
+        Link::Notices,
     ),
 ];
+
+/// Where `Link::Notices` goes when sayit runs outside its app bundle (a
+/// development build has no notices file).
+pub const LICENSE_PAGE: &str = "https://github.com/ipsamurai/sayit#license";
 
 /// Choices for how many recent dictations to keep.
 pub const HISTORY_SIZES: [usize; 3] = [3, 5, 10];
@@ -636,11 +653,15 @@ fn clipboard_pane(
 
 #[cfg(test)]
 mod tests {
-    use super::LINKS;
+    use super::{LICENSE_PAGE, LINKS, Link};
 
     #[test]
     fn about_links_stay_on_the_project() {
-        for (_, _, url) in LINKS {
+        let web = LINKS.iter().filter_map(|(_, _, link)| match link {
+            Link::Web(url) => Some(*url),
+            Link::Notices => None,
+        });
+        for url in web.chain([LICENSE_PAGE]) {
             assert!(
                 url.starts_with("https://github.com/ipsamurai/sayit"),
                 "{url}"

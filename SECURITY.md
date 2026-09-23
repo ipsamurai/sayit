@@ -30,7 +30,7 @@ What sayit does by design:
 - The global hotkey listener sees every key event, but only to match the configured hotkey. Keys are never stored, logged or sent anywhere.
 - The microphone is open only while the hotkey is held, or for 1.5 seconds when the user clicks Test Microphone in Settings. The test audio stays in memory and is discarded after measuring its level.
 - Clipboard history is off by default. When on, the last 3 to 10 dictations are kept in memory only, never on disk, and are cleared on quit, on **Clear**, or when the option is turned off.
-- Settings › About opens only a fixed list of GitHub addresses, in the user's browser. The app itself makes no network connections.
+- Settings › About opens only a fixed list of GitHub addresses, in the user's browser, and the license notices file inside the app. The app itself makes no network connections.
 - Pasted text passes through the system clipboard for about 250 ms. It's marked Transient/Concealed so clipboard managers skip it, and your previous clipboard is restored afterwards. Other apps running as the same user can still read the clipboard during that window. That's a limitation of pasting through the clipboard, not something sayit can prevent.
 - On Linux, the udev rule in the README gives every program the user runs access to input devices, which Wayland global hotkeys require. The README calls out this trade-off.
 

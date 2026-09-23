@@ -64,6 +64,18 @@ pub fn in_app_bundle() -> bool {
         .unwrap_or(false)
 }
 
+/// A file in sayit.app's Contents/Resources, if running from the app and the
+/// file is there.
+#[cfg(target_os = "macos")]
+pub fn bundle_resource(name: &str) -> Option<PathBuf> {
+    if !in_app_bundle() {
+        return None;
+    }
+    let exe = std::env::current_exe().ok()?;
+    let file = exe.parent()?.parent()?.join("Resources").join(name);
+    file.is_file().then_some(file)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

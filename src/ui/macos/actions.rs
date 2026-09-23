@@ -20,7 +20,7 @@ use objc2_app_kit::{
 };
 use objc2_foundation::{NSNotification, NSObjectProtocol, NSString, NSURL};
 
-use super::settings::{self, ModelRow, ModelsState, SettingsTab, SettingsWindow, Toggle};
+use super::settings::{self, Link, ModelRow, ModelsState, SettingsTab, SettingsWindow, Toggle};
 use super::setup::{self, HOTKEYS, Setup, refresh_permissions};
 use super::widgets::check_state;
 use super::{
@@ -34,6 +34,9 @@ use crate::daemon::Controls;
 use crate::models::{self, Download, Finished};
 use crate::paths;
 use crate::stt::ModelId;
+
+/// Written into sayit.app by scripts/bundle-macos.sh.
+const NOTICES_FILE: &str = "THIRD-PARTY-NOTICES.txt";
 
 pub struct Ivars {
     controls: Arc<Controls>,
@@ -169,13 +172,21 @@ define_class!(
             save_config(|cfg| cfg.on_close = on_close);
         }
 
-        /// The About tab's buttons: opens one of the fixed addresses in
-        /// the browser.
+        /// The About tab's buttons: a fixed page in the browser, or the
+        /// bundled license notices in the default text viewer.
         #[unsafe(method(openLink:))]
         fn open_link(&self, button: &NSButton) {
-            if let Some((_, _, url)) = settings::LINKS.get(button.tag() as usize)
-                && let Some(url) = NSURL::URLWithString(&NSString::from_str(url))
-            {
+            let url = match settings::LINKS.get(button.tag() as usize) {
+                Some((_, _, Link::Web(url))) => NSURL::URLWithString(&NSString::from_str(url)),
+                Some((_, _, Link::Notices)) => match paths::bundle_resource(NOTICES_FILE) {
+                    Some(file) => Some(NSURL::fileURLWithPath(&NSString::from_str(
+                        &file.to_string_lossy(),
+                    ))),
+                    None => NSURL::URLWithString(&NSString::from_str(settings::LICENSE_PAGE)),
+                },
+                None => None,
+            };
+            if let Some(url) = url {
                 NSWorkspace::sharedWorkspace().openURL(&url);
             }
         }
