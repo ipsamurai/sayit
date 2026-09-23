@@ -80,6 +80,7 @@ mode = "hold"                  # or "toggle": press once to start, again to stop
 model = "parakeet-v2"
 restore_clipboard = true       # put your previous clipboard back after pasting
 remove_fillers = true          # drop "um", "uh", "erm" from what you dictate
+newline_after_take = true      # each dictation ends with a line break (false: a space)
 unload_after_idle_mins = 0     # e.g. 10 to free ~1 GB of RAM when idle (reload takes <1 s)
 max_recording_secs = 300       # capped at 3600
 # input_device = "Built-in Microphone"   # unset = system default
@@ -112,6 +113,7 @@ tccutil reset Microphone io.github.ipsamurai.sayit
 | The menu shows "Stopped: run scripts/fetch-models.sh…" | The speech model is missing. Run `./scripts/fetch-models.sh`. |
 | Nothing is pasted in some apps | sayit pastes with ⌘V. Password fields and apps that block synthetic keystrokes won't accept it. |
 | The wrong character is pasted on Dvorak or other non-QWERTY layouts | This is a known limitation, and a fix is planned. |
+| Dictating into a terminal runs the text as a command | Each dictation ends with a line break, which works like pressing Return. Modern shells (zsh, which is the macOS default, and bash 5.1+) don't run pasted text, but older shells, some SSH sessions and some REPLs do. Set `newline_after_take = false` if you dictate into terminals. |
 | Short or odd words appear when you didn't really speak | Speak for at least half a second. Very short or near-silent takes can produce stray words. |
 
 ## Linux (untested)

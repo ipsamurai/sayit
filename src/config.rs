@@ -26,6 +26,8 @@ pub struct Config {
     pub restore_clipboard: bool,
     /// Drop hesitation sounds ("um", "uh", "erm") from transcripts.
     pub remove_fillers: bool,
+    /// End each take with a line break (otherwise a space).
+    pub newline_after_take: bool,
     /// Free the model's ~1 GB of RAM after this many idle minutes (0 = never).
     /// Reloading takes under a second.
     pub unload_after_idle_mins: u64,
@@ -45,6 +47,7 @@ impl Default for Config {
             model: ModelId::DEFAULT,
             restore_clipboard: true,
             remove_fillers: true,
+            newline_after_take: true,
             unload_after_idle_mins: 0,
             max_recording_secs: 300,
             input_device: None,

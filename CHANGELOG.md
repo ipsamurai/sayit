@@ -6,6 +6,7 @@ All notable changes to sayit are documented here. The format follows [Keep a Cha
 
 ### Added
 - Filler-word removal: "um", "uh", "erm" and similar hesitation sounds are dropped from transcripts, with punctuation and capitalization tidied up. Turn it off with `remove_fillers = false`.
+- Each dictation now ends with a line break, so the next one starts on a new line. `newline_after_take = false` uses a space instead.
 
 ## [0.1.0] - 2026-09-23
 
