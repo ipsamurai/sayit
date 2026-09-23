@@ -1,0 +1,47 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Privacy first:** don't paste transcripts, clipboard contents or anything else you dictated if it's private. Describe the problem instead.
+        **Security issues** go through a private report (see SECURITY.md), not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: sayit version or commit
+      placeholder: "sayit --version, or the git commit"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and version
+      placeholder: "macOS 14.5 / Ubuntu 24.04 (GNOME, Wayland)"
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How were you running it?
+      options:
+        - sayit.app (menu bar)
+        - sayit app (terminal)
+        - sayit run (terminal)
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output of `sayit app -v` or `sayit run -v`
+      description: Remove any transcript lines you don't want to share.
+      render: text

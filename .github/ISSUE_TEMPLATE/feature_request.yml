@@ -1,0 +1,17 @@
+name: Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to happen?
+  - type: markdown
+    attributes:
+      value: sayit stays local-only and light enough for 8 GB machines, so features that need network access or a lot of memory are unlikely to be accepted. See CONTRIBUTING.md.

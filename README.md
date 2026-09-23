@@ -1,0 +1,166 @@
+# sayit
+
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+
+**Private, local-only dictation for lower-end machines.** Hold a key, speak, and release: your words are typed into whatever app you're using. Nothing leaves your computer.
+
+- 🔒 **Local only.** The app contains no networking code. There's no cloud, no account and no telemetry.
+- 🎙️ **Audio never touches disk.** It's held in memory only while you speak, then discarded.
+- 🪶 **Light.** It runs on the CPU, with no GPU needed. It uses about 1 GB of RAM while the model is loaded and typically takes 0.1–0.3 s per sentence on an entry-level 8 GB laptop.
+- 🖥️ **Menu-bar app** (macOS) with status, pause, and a microphone picker.
+
+> **Status: early (0.1).** macOS is supported. The Linux code path (Wayland/X11) is written but has **not been tested yet**. English only for now.
+
+## Contents
+- [Requirements](#requirements)
+- [Quick start (macOS)](#quick-start-macos)
+- [Using sayit](#using-sayit)
+- [Configuration](#configuration)
+- [Updating and uninstalling](#updating-and-uninstalling)
+- [Troubleshooting](#troubleshooting)
+- [Linux (untested)](#linux-untested)
+- [Privacy and security](#privacy-and-security)
+- [Speech model](#speech-model)
+- [Contributing](#contributing)
+- [License](#license)
+- [Disclaimer](#disclaimer)
+
+## Requirements
+
+- **macOS 13 (Ventura) or later**, with 8 GB of RAM recommended
+- About 1 GB of free disk space for the speech model and the app
+- **To build:** [Rust](https://rustup.rs) (stable) and the Xcode command-line tools (`xcode-select --install`)
+
+sayit is currently distributed as source code. You build it yourself, which takes about two minutes.
+
+## Quick start (macOS)
+
+```sh
+git clone https://github.com/ipsamurai/sayit.git
+cd sayit
+./scripts/fetch-models.sh     # downloads the speech model (~660 MB), SHA-256 verified
+./scripts/package-dmg.sh      # builds target/release/sayit-<version>.dmg
+open target/release/sayit-*.dmg
+```
+
+1. Drag **sayit** into **Applications** and open it. A microphone icon appears in the menu bar; sayit has no Dock icon.
+2. When macOS asks, allow **Accessibility** in *System Settings › Privacy & Security*. sayit needs it to detect the hotkey and to paste. sayit starts as soon as you allow it.
+3. Click into any text field, **hold Right Option**, and speak. Release the key and the text appears. macOS asks for **Microphone** access the first time.
+
+The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it opens normally. If you copy it to another Mac, Gatekeeper blocks the first launch: right-click the app and choose **Open**.
+
+## Using sayit
+
+| To… | Do this |
+|---|---|
+| Dictate | Hold the hotkey (default **Right Option**), speak, release |
+| Pause | Menu bar › **Pause Dictation**. The hotkey is ignored and any take in progress is discarded. |
+| Choose a microphone | Menu bar › **Microphone** |
+| Quit | Menu bar › **Quit sayit** (⌘Q) |
+
+### Command line
+The same binary also runs from a terminal:
+
+| Command | What it does |
+|---|---|
+| `sayit app -v` | The menu-bar app, with timings and transcripts printed to the terminal |
+| `sayit run -v` | Dictation without a menu-bar icon |
+| `sayit listen` | Press Enter to start and stop; prints the text and timings |
+| `sayit transcribe file.wav` | Transcribes a WAV file (useful for benchmarks) |
+
+When you run sayit from a terminal, macOS grants permissions to the **terminal app** (Terminal, iTerm…), not to sayit. Enable your terminal under *Privacy & Security › Accessibility*, then quit the terminal fully (⌘Q) and reopen it.
+
+## Configuration
+
+sayit creates `config.toml` on first run and saves menu choices to it. It lives in `~/Library/Application Support/sayit/` on macOS and `~/.config/sayit/` on Linux.
+
+```toml
+hotkey = "OptRight"            # or "Fn", "CtrlRight", "Ctrl+Alt+Space"
+mode = "hold"                  # or "toggle": press once to start, again to stop
+model = "parakeet-v2"
+restore_clipboard = true       # put your previous clipboard back after pasting
+unload_after_idle_mins = 0     # e.g. 10 to free ~1 GB of RAM when idle (reload takes <1 s)
+max_recording_secs = 300       # capped at 3600
+# input_device = "Built-in Microphone"   # unset = system default
+```
+
+Restart sayit after editing the file by hand.
+
+## Updating and uninstalling
+
+**Update:**
+1. Run `git pull` and then `./scripts/package-dmg.sh`.
+2. Replace the app in Applications with the new one.
+3. The new build counts as a different app to macOS, so run `tccutil reset Accessibility io.github.ipsamurai.sayit` and allow it again when prompted.
+
+**Uninstall:**
+```sh
+osascript -e 'quit app "sayit"'
+rm -rf /Applications/sayit.app
+rm -rf ~/Library/Application\ Support/sayit    # config and speech model
+tccutil reset Accessibility io.github.ipsamurai.sayit
+tccutil reset Microphone io.github.ipsamurai.sayit
+```
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| The first words are cut off | Bluetooth headset microphones take about a second to switch on. Choose the built-in mic under **Microphone**. |
+| The hotkey stopped working after a rebuild | macOS still shows sayit as allowed, but the permission belongs to the old build. Run `tccutil reset Accessibility io.github.ipsamurai.sayit`, relaunch, and allow it again. |
+| The menu shows "Stopped: run scripts/fetch-models.sh…" | The speech model is missing. Run `./scripts/fetch-models.sh`. |
+| Nothing is pasted in some apps | sayit pastes with ⌘V. Password fields and apps that block synthetic keystrokes won't accept it. |
+| The wrong character is pasted on Dvorak or other non-QWERTY layouts | This is a known limitation, and a fix is planned. |
+| Short or odd words appear when you didn't really speak | Speak for at least half a second. Very short or near-silent takes can produce stray words. |
+
+## Linux (untested)
+
+sayit needs read access to `/dev/input/event*` for the hotkey and write access to `/dev/uinput` for pasting. This udev rule grants both to the logged-in user:
+
+```sh
+sudo tee /etc/udev/rules.d/70-sayit.rules <<'EOF'
+KERNEL=="uinput", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event*", TAG+="uaccess"
+EOF
+sudo udevadm control --reload && sudo udevadm trigger
+```
+
+> ⚠️ **Security trade-off.** This rule lets *every* program you run read all keyboard input and create virtual input devices. That's what any global-hotkey tool on Wayland needs, but only install it if you trust the software you run. To undo it, delete the file and run the two `udevadm` commands again.
+
+Build dependency: `libasound2-dev` (ALSA headers). The menu-bar app is macOS-only for now; use `sayit run` on Linux.
+
+## Privacy and security
+
+- **No network code.** `cargo tree -e normal | grep -iE 'http|reqwest|hyper|tokio'` prints nothing. The only downloads are:
+  - the speech model, fetched by `scripts/fetch-models.sh` from a pinned revision, with every file checked against its SHA-256 hash;
+  - ONNX Runtime, which the `ort` crate downloads and hash-checks while building.
+- **Audio** stays in memory and is discarded after each dictation. The microphone is open only while you hold the key.
+- **Transcripts** are never written to disk or logs. They're printed only when you run with `-v`.
+- **Clipboard.** Pasted text is marked Transient/Concealed so clipboard managers skip it, and your previous clipboard is restored about 250 ms later.
+- **Least privilege.** sayit asks only for Microphone and Accessibility. The app is signed with the macOS Hardened Runtime, which blocks other programs from injecting code to borrow those permissions. Its only entitlement is microphone access.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a public issue.
+
+## Speech model
+
+sayit uses **[NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2)**, an English speech model, in an [int8 ONNX export](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx). It was the fastest and most accurate of the models we benchmarked on an 8 GB laptop: Parakeet v3, Moonshine v2 and Cohere Transcribe. The numbers are in [PLAN.md](PLAN.md#model-choice-entry-level-8-gb-laptop-cpu-only).
+
+The model isn't part of this repository. `fetch-models.sh` downloads it directly from Hugging Face, and it's licensed by NVIDIA under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). If you redistribute the model files, you must follow that license. [docs/MODELS.md](docs/MODELS.md) explains how to add other models.
+
+## Contributing
+
+Contributions are welcome, especially testing on Linux. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md), and the roadmap is in [PLAN.md](PLAN.md).
+
+## License
+
+Copyright © 2026 The sayit contributors.
+
+sayit is licensed under either the [Apache License, Version 2.0](LICENSE-APACHE) or the [MIT License](LICENSE-MIT), at your option.
+
+Unless you explicitly state otherwise, any contribution you intentionally submit for inclusion in sayit, as defined in the Apache-2.0 license, is dual licensed as above, without any additional terms or conditions.
+
+## Disclaimer
+
+sayit is provided **"as is", without warranty of any kind**; see the licenses for the full terms. Speech recognition makes mistakes, so review dictated text before you send or submit it, especially for medical, legal, financial or other important content.
+
+sayit is an independent project. It is not affiliated with, endorsed by or sponsored by Apple, NVIDIA or any other company named here. Apple, macOS and Mac are trademarks of Apple Inc., and NVIDIA is a trademark of NVIDIA Corporation. They're used here only to describe compatibility and the model in use.
