@@ -9,6 +9,8 @@ All notable changes to sayit are documented here. The format follows [Keep a Cha
 - Each dictation now ends with a line break, so the next one starts on a new line. `newline_after_take = false` uses a space instead.
 - Settings window (menu bar › Settings…, ⌘,) with the text options. Changes apply to the next dictation without a restart.
 - Only one copy of sayit runs at a time; a second copy exits instead of pasting everything twice.
+- Model manager in Settings: download (with progress and cancel), switch or delete Parakeet v2, Parakeet v3, Moonshine Medium and Moonshine Small. Downloads run the bundled, checksum-verifying `fetch-models.sh`, so the app itself still has no network code.
+- On first launch without a model, Settings opens and dictation starts as soon as a download finishes.
 
 ## [0.1.0] - 2026-09-23
 

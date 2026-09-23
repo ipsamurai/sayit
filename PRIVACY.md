@@ -24,7 +24,7 @@ If a future feature stores anything else, such as a history of recent dictations
 
 | When | What connects | To | Why |
 |---|---|---|---|
-| You download a speech model | the bundled `fetch-models.sh` script, using the system's `curl` | Hugging Face | To download the model files, each checked against a pinned SHA-256 hash |
+| You click **Download** in Settings (or run `fetch-models.sh`) | the bundled `fetch-models.sh` script, using the system's `curl` | Hugging Face; the Moonshine files come from blob.handy.computer | To download the model files, each checked against a pinned SHA-256 hash |
 | You build sayit from source | Rust's `cargo` | crates.io and the ONNX Runtime download server | To fetch the code sayit is built from |
 | *Planned:* checking for updates | the bundled script, using `curl` | GitHub | **Off unless you turn it on.** It only tells you a new version exists; it never downloads or installs anything by itself |
 

@@ -18,6 +18,7 @@ cpal = "0.18.2"
 dirs = "7.0.0"
 handy-keys = "0.3.4"
 hound = "3.5.1"
+libc = "0.2.189"
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.6"
 transcribe-rs = { version = "0.3.11", default-features = false, features = ["onnx"] }

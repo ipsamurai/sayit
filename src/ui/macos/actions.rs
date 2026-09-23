@@ -2,27 +2,36 @@
 //! AppKit calls back by selector, so this is an Objective-C class defined in
 //! Rust; each method hands off to plain Rust.
 
-use std::cell::OnceCell;
+use std::cell::{Cell, OnceCell, RefCell};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use dispatch2::DispatchQueue;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{
-    NSButton, NSControlStateValueOn, NSMenu, NSMenuDelegate, NSMenuItem, NSWindow,
+    NSAlert, NSAlertFirstButtonReturn, NSButton, NSControlStateValueOn, NSMenu, NSMenuDelegate,
+    NSMenuItem, NSWindow,
 };
-use objc2_foundation::NSObjectProtocol;
+use objc2_foundation::{NSObjectProtocol, NSString};
 
-use super::settings::{self, Toggle};
+use super::settings::{self, ModelRow, ModelsState, Toggle};
 use super::widgets::check_state;
-use super::{DEFAULT_MIC_TAG, MODEL_MENU, fill_mic_menu, fill_model_menu, save_config, with_ui};
+use super::{
+    DEFAULT_MIC_TAG, MODEL_MENU, fill_mic_menu, fill_model_menu, save_config, with_actions, with_ui,
+};
 use crate::daemon::Controls;
+use crate::models::{self, Download, Finished};
 use crate::stt::ModelId;
 
 pub struct Ivars {
     controls: Arc<Controls>,
-    settings: OnceCell<Retained<NSWindow>>,
+    settings: OnceCell<(Retained<NSWindow>, Vec<ModelRow>)>,
+    /// At most one model downloads at a time.
+    download: RefCell<Option<(ModelId, Download)>>,
+    progress: Cell<f64>,
+    last_error: RefCell<Option<(ModelId, String)>>,
 }
 
 define_class!(
@@ -53,11 +62,70 @@ define_class!(
 
         #[unsafe(method(selectModel:))]
         fn select_model(&self, item: &NSMenuItem) {
-            let Some(&model) = ModelId::ALL.get(item.tag() as usize) else {
+            if let Some(&model) = ModelId::ALL.get(item.tag() as usize) {
+                self.use_model(model);
+            }
+        }
+
+        #[unsafe(method(useModel:))]
+        fn use_model_clicked(&self, button: &NSButton) {
+            if let Some(&model) = ModelId::ALL.get(button.tag() as usize) {
+                self.use_model(model);
+            }
+        }
+
+        /// Download, or Cancel while this model is downloading.
+        #[unsafe(method(downloadModel:))]
+        fn download_clicked(&self, button: &NSButton) {
+            let Some(&model) = ModelId::ALL.get(button.tag() as usize) else {
                 return;
             };
-            *self.controls().model.lock().unwrap_or_else(|e| e.into_inner()) = model;
-            save_config(|cfg| cfg.model = model);
+            if let Some((active, download)) = &*self.ivars().download.borrow() {
+                if *active == model {
+                    download.cancel();
+                }
+                return;
+            }
+            let started = models::start(
+                model,
+                |p| DispatchQueue::main().exec_async(move || with_actions(|a| a.download_progress(p))),
+                move |f| {
+                    DispatchQueue::main().exec_async(move || with_actions(|a| a.download_finished(model, f)))
+                },
+            );
+            match started {
+                Ok(download) => {
+                    *self.ivars().last_error.borrow_mut() = None;
+                    self.ivars().progress.set(0.0);
+                    *self.ivars().download.borrow_mut() = Some((model, download));
+                }
+                Err(e) => *self.ivars().last_error.borrow_mut() = Some((model, format!("{e:#}"))),
+            }
+            self.refresh_models();
+        }
+
+        #[unsafe(method(deleteModel:))]
+        fn delete_clicked(&self, button: &NSButton) {
+            let Some(&model) = ModelId::ALL.get(button.tag() as usize) else {
+                return;
+            };
+            if model == self.controls().model() {
+                return; // the button is disabled for the model in use
+            }
+            let alert = NSAlert::new(self.mtm());
+            alert.setMessageText(&NSString::from_str(&format!("Delete {}?", model.label())));
+            alert.setInformativeText(&NSString::from_str(&format!(
+                "This frees {} MB. You can download it again later.",
+                model.download_bytes() / 1_000_000
+            )));
+            alert.addButtonWithTitle(&NSString::from_str("Delete"));
+            alert.addButtonWithTitle(&NSString::from_str("Cancel"));
+            if alert.runModal() == NSAlertFirstButtonReturn {
+                if let Err(e) = models::delete(model) {
+                    *self.ivars().last_error.borrow_mut() = Some((model, format!("{e:#}")));
+                }
+                self.refresh_models();
+            }
         }
 
         #[unsafe(method(toggleSetting:))]
@@ -71,9 +139,8 @@ define_class!(
         }
 
         #[unsafe(method(showSettings:))]
-        fn show_settings(&self, _sender: Option<&AnyObject>) {
-            let window = self.ivars().settings.get_or_init(|| settings::build(self.mtm(), self));
-            settings::show(self.mtm(), window);
+        fn show_settings_clicked(&self, _sender: Option<&AnyObject>) {
+            self.show_settings();
         }
     }
 
@@ -98,6 +165,9 @@ impl Actions {
         let this = Self::alloc(mtm).set_ivars(Ivars {
             controls,
             settings: OnceCell::new(),
+            download: RefCell::new(None),
+            progress: Cell::new(0.0),
+            last_error: RefCell::new(None),
         });
         // SAFETY: NSObject's designated initializer, called once on a fresh
         // allocation whose ivars are already set.
@@ -106,5 +176,56 @@ impl Actions {
 
     pub fn controls(&self) -> &Controls {
         &self.ivars().controls
+    }
+
+    /// Switches the dictation service to `model` (it loads before the next
+    /// take) and saves the choice.
+    fn use_model(&self, model: ModelId) {
+        *self
+            .controls()
+            .model
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = model;
+        save_config(|cfg| cfg.model = model);
+        self.refresh_models();
+    }
+
+    pub fn show_settings(&self) {
+        let (window, _) = self
+            .ivars()
+            .settings
+            .get_or_init(|| settings::build(self.mtm(), self));
+        self.refresh_models();
+        settings::show(self.mtm(), window);
+    }
+
+    fn download_progress(&self, fraction: f64) {
+        self.ivars().progress.set(fraction);
+        self.refresh_models();
+    }
+
+    fn download_finished(&self, model: ModelId, finished: Finished) {
+        self.ivars().download.borrow_mut().take();
+        match finished {
+            // With nothing usable yet (e.g. first run), use the new model.
+            Finished::Installed if !self.controls().model().is_installed() => self.use_model(model),
+            Finished::Installed | Finished::Cancelled => {}
+            Finished::Failed(e) => *self.ivars().last_error.borrow_mut() = Some((model, e)),
+        }
+        self.refresh_models();
+    }
+
+    fn refresh_models(&self) {
+        let Some((_, rows)) = self.ivars().settings.get() else {
+            return;
+        };
+        let downloading = self.ivars().download.borrow().as_ref().map(|(m, _)| *m);
+        let last_error = self.ivars().last_error.borrow();
+        let state = ModelsState {
+            current: self.controls().model(),
+            downloading: downloading.map(|m| (m, self.ivars().progress.get())),
+            error: last_error.as_ref(),
+        };
+        settings::refresh_models(rows, &state);
     }
 }

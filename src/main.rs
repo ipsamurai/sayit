@@ -15,6 +15,8 @@ mod audio;
 mod config;
 mod daemon;
 mod inject;
+#[cfg(target_os = "macos")]
+mod models;
 mod paths;
 mod stt;
 mod text;

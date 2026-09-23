@@ -38,12 +38,11 @@ sayit is currently distributed as source code. You build it yourself, which take
 ```sh
 git clone https://github.com/ipsamurai/sayit.git
 cd sayit
-./scripts/fetch-models.sh     # downloads the speech model (~660 MB), SHA-256 verified
 ./scripts/package-dmg.sh      # builds target/release/sayit-<version>.dmg
 open target/release/sayit-*.dmg
 ```
 
-1. Drag **sayit** into **Applications** and open it. A microphone icon appears in the menu bar; sayit has no Dock icon.
+1. Drag **sayit** into **Applications** and open it. A microphone icon appears in the menu bar; sayit has no Dock icon. On first launch, Settings opens so you can **download a speech model** (Parakeet v2 is recommended).
 2. When macOS asks, allow **Accessibility** in *System Settings › Privacy & Security*. sayit needs it to detect the hotkey and to paste. sayit starts as soon as you allow it.
 3. Click into any text field, **hold Right Option**, and speak. Release the key and the text appears. macOS asks for **Microphone** access the first time.
 
@@ -111,7 +110,7 @@ tccutil reset Microphone io.github.ipsamurai.sayit
 |---|---|
 | The first words are cut off | Bluetooth headset microphones take about a second to switch on. Choose the built-in mic under **Microphone**. |
 | The hotkey stopped working after a rebuild | macOS still shows sayit as allowed, but the permission belongs to the old build. Run `tccutil reset Accessibility io.github.ipsamurai.sayit`, relaunch, and allow it again. |
-| The menu shows "Stopped: run scripts/fetch-models.sh…" | The speech model is missing. Run `./scripts/fetch-models.sh`. |
+| The menu says "No speech model yet" | Open **Settings** and download a model. Dictation starts as soon as it finishes. |
 | Nothing is pasted in some apps | sayit pastes with ⌘V. Password fields and apps that block synthetic keystrokes won't accept it. |
 | The wrong character is pasted on Dvorak or other non-QWERTY layouts | This is a known limitation, and a fix is planned. |
 | Dictating into a terminal runs the text as a command | Each dictation ends with a line break, which works like pressing Return. Modern shells (zsh, which is the macOS default, and bash 5.1+) don't run pasted text, but older shells, some SSH sessions and some REPLs do. Set `newline_after_take = false` if you dictate into terminals. |
@@ -149,9 +148,16 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a p
 
 ## Speech model
 
-sayit uses **[NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2)**, an English speech model, in an [int8 ONNX export](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx). It was the fastest and most accurate of the models we benchmarked on an 8 GB laptop: Parakeet v3, Moonshine v2 and Cohere Transcribe. The numbers are in [PLAN.md](PLAN.md#model-choice-entry-level-8-gb-laptop-cpu-only).
+Choose and download a model in **Settings › Speech model**, or with `./scripts/fetch-models.sh <name>`. Switching models takes effect on your next dictation.
 
-The model isn't part of this repository. `fetch-models.sh` downloads it directly from Hugging Face, and it's licensed by NVIDIA under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). If you redistribute the model files, you must follow that license. [docs/MODELS.md](docs/MODELS.md) explains how to add other models.
+| Model | Languages | Download | Memory | Notes | License |
+|---|---|---|---|---|---|
+| **Parakeet v2** (default) | English | 660 MB | ~1.2 GB | Fastest and most accurate in our tests | [CC-BY-4.0](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (NVIDIA) |
+| Parakeet v3 | 25 European | 670 MB | ~1.2 GB | For dictating in other languages | [CC-BY-4.0](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (NVIDIA) |
+| Moonshine Medium | English | 200 MB | ~0.9 GB | Slower on long dictations | [MIT](https://github.com/moonshine-ai/moonshine) (Moonshine AI) |
+| Moonshine Small | English | 105 MB | ~0.65 GB | For low-memory machines; less accurate | [MIT](https://github.com/moonshine-ai/moonshine) (Moonshine AI) |
+
+The benchmark behind these notes is in [PLAN.md](PLAN.md#model-choice-entry-level-8-gb-laptop-cpu-only). Models aren't part of this repository: they're downloaded from Hugging Face and each file is checked against a pinned SHA-256 checksum. If you redistribute a model, follow its license. [docs/MODELS.md](docs/MODELS.md) explains how to add others.
 
 ## Contributing
 

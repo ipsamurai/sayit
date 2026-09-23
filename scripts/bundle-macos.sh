@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Builds target/release/sayit.app: the release binary, Info.plist and icon,
-# ad-hoc signed. Needs no admin rights and writes only inside target/.
-# Models are not bundled; they stay in ~/Library/Application Support/sayit
-# (see fetch-models.sh).
+# Builds target/release/sayit.app: the release binary, Info.plist, icon and
+# the model download script, ad-hoc signed. Needs no admin rights and writes only inside target/.
+# Models are not bundled: the app downloads them on first run into
+# ~/Library/Application Support/sayit.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -18,6 +18,9 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp target/release/sayit "$APP/Contents/MacOS/sayit"
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# The app runs this to download models (it has no network code itself).
+# Inside the bundle it's covered by the code signature.
+cp scripts/fetch-models.sh "$APP/Contents/Resources/fetch-models.sh"
 
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

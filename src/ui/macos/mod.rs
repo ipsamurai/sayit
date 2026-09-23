@@ -41,6 +41,7 @@ enum State {
     Loading,
     Ready(Status),
     NeedsAccessibility,
+    NeedsModel,
     Failed,
 }
 
@@ -56,6 +57,17 @@ struct Ui {
 
 thread_local! {
     static UI: OnceCell<Ui> = const { OnceCell::new() };
+    static ACTIONS: OnceCell<Retained<Actions>> = const { OnceCell::new() };
+}
+
+/// Runs `f` with the app's `Actions`. Main thread only; background threads
+/// get here through `DispatchQueue::main()`.
+fn with_actions(f: impl FnOnce(&Actions)) {
+    ACTIONS.with(|a| {
+        if let Some(actions) = a.get() {
+            f(actions);
+        }
+    });
 }
 
 pub fn run(cfg: Config, verbose: bool) -> Result<()> {
@@ -69,6 +81,9 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
     let actions = Actions::new(mtm, controls.clone());
     app.setMainMenu(Some(&main_menu(mtm, &actions)));
     let (item, status_line) = status_item(mtm, &actions);
+    // Kept here for the life of the app: menus and windows hold only weak
+    // references to it.
+    ACTIONS.with(|a| a.set(actions).ok());
 
     // Shows the system prompt once if needed; the start thread then waits.
     let trusted = daemon::accessibility_trusted(true);
@@ -98,6 +113,16 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
                 }
                 set_state(State::Loading);
             }
+            if !controls.model().is_installed() {
+                // First run, or the chosen model was deleted: open Settings
+                // so the user can download one, and wait for it.
+                set_state(State::NeedsModel);
+                DispatchQueue::main().exec_async(|| with_actions(|a| a.show_settings()));
+                while !controls.model().is_installed() {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+                set_state(State::Loading);
+            }
             let result = daemon::start(cfg, verbose, controls, |s| set_state(State::Ready(s)))
                 .and_then(|d| {
                     set_state(State::Ready(Status::Idle));
@@ -111,9 +136,6 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
         })?;
 
     app.run();
-    // Menu items and the window refer to `actions` weakly; keep it alive
-    // until the app exits.
-    drop(actions);
     Ok(())
 }
 
@@ -211,6 +233,10 @@ fn render(ui: &Ui) {
         (State::NeedsAccessibility, _) => (
             "exclamationmark.triangle",
             "Waiting for Accessibility permission (System Settings › Privacy & Security)".into(),
+        ),
+        (State::NeedsModel, _) => (
+            "arrow.down.circle",
+            "No speech model yet: download one in Settings".into(),
         ),
         (State::Failed, _) => (
             "exclamationmark.triangle",
