@@ -4,7 +4,7 @@
 
 **Private, local-only dictation for lower-end machines.** Hold a key, speak, and release: your words are typed into whatever app you're using. Nothing leaves your computer.
 
-- 🔒 **Local only.** The app contains no networking code. There's no cloud, no account and no telemetry.
+- 🔒 **Private and local.** The app contains no networking code and collects nothing: no account, no sign-up, no telemetry. See [PRIVACY.md](PRIVACY.md).
 - 🎙️ **Audio never touches disk.** It's held in memory only while you speak, then discarded.
 - 🪶 **Light.** It runs on the CPU, with no GPU needed. It uses about 1 GB of RAM while the model is loaded and typically takes 0.1–0.3 s per sentence on an entry-level 8 GB laptop.
 - 🖥️ **Menu-bar app** (macOS) with status, pause, and a microphone picker.
@@ -135,6 +135,8 @@ Build dependency: `libasound2-dev` (ALSA headers). The menu-bar app is macOS-onl
 
 ## Privacy and security
 
+sayit collects no data and needs no account. The full details, including how to check each claim yourself, are in [PRIVACY.md](PRIVACY.md). In short:
+
 - **No network code.** `cargo tree -e normal | grep -iE 'http|reqwest|hyper|tokio'` prints nothing. The only downloads are:
   - the speech model, fetched by `scripts/fetch-models.sh` from a pinned revision, with every file checked against its SHA-256 hash;
   - ONNX Runtime, which the `ort` crate downloads and hash-checks while building.
@@ -165,6 +167,6 @@ Unless you explicitly state otherwise, any contribution you intentionally submit
 
 ## Disclaimer
 
-sayit is provided **"as is", without warranty of any kind**; see the licenses for the full terms. Speech recognition makes mistakes, so review dictated text before you send or submit it, especially for medical, legal, financial or other important content.
+sayit is provided **"as is", without warranty of any kind**, and its authors aren't liable for any harm arising from its use. **You're responsible for how you use it:** lawfully, with the consent of anyone whose voice you record, and after checking what it writes. Read the full [DISCLAIMER.md](DISCLAIMER.md) before using sayit.
 
 sayit is an independent project. It is not affiliated with, endorsed by or sponsored by Apple, NVIDIA or any other company named here. Apple, macOS and Mac are trademarks of Apple Inc., and NVIDIA is a trademark of NVIDIA Corporation. They're used here only to describe compatibility and the model in use.
