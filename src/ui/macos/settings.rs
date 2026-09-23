@@ -304,22 +304,18 @@ fn about_pane(mtm: MainThreadMarker, target: &AnyObject) -> Retained<NSStackView
     fixed_width(&icon, 64.0);
     fixed_height(&icon, 64.0);
     let name = label(mtm, "sayit");
-    name.setFont(Some(&NSFont::boldSystemFontOfSize(20.0)));
-    let version = note(
-        mtm,
-        &format!(
-            "Version {}\nPrivate, local dictation for lower-end devices.",
-            env!("CARGO_PKG_VERSION")
-        ),
-        PANE_WIDTH,
-    );
-    version.setAlignment(NSTextAlignment::Center);
+    name.setFont(Some(&NSFont::boldSystemFontOfSize(22.0)));
+    let version = label(mtm, &format!("Version {}", env!("CARGO_PKG_VERSION")));
+    version.setTextColor(Some(&NSColor::secondaryLabelColor()));
+    let tagline = centered_note(mtm, "Private, local dictation for lower-end devices.");
     let header = stack(
         mtm,
         NSUserInterfaceLayoutOrientation::Vertical,
-        6.0,
-        &[&icon, &name, &version],
+        4.0,
+        &[&icon, &name, &version, &tagline],
     );
+    header.setAlignment(NSLayoutAttribute::CenterX);
+    header.setCustomSpacing_afterView(10.0, &icon);
 
     let rows: Vec<_> = LINKS
         .iter()
@@ -337,11 +333,10 @@ fn about_pane(mtm: MainThreadMarker, target: &AnyObject) -> Retained<NSStackView
         })
         .collect();
     let refs: Vec<&NSView> = rows.iter().map(|r| -> &NSView { r }).collect();
-    let credits = note(
+    let credits = centered_note(
         mtm,
-        "© 2026 ipsamurai and the sayit contributors. Licensed under MIT OR Apache-2.0.\n\
-         Speech models: NVIDIA Parakeet (CC-BY-4.0) and Moonshine AI (MIT).",
-        PANE_WIDTH,
+        "© 2026 ipsamurai and the sayit contributors · MIT OR Apache-2.0\n\
+         Speech models: NVIDIA Parakeet (CC-BY-4.0), Moonshine AI (MIT)",
     );
     let pane = pane(
         mtm,
@@ -349,6 +344,13 @@ fn about_pane(mtm: MainThreadMarker, target: &AnyObject) -> Retained<NSStackView
     );
     pane.setAlignment(NSLayoutAttribute::CenterX);
     pane
+}
+
+/// A secondary line centred across the pane.
+fn centered_note(mtm: MainThreadMarker, text: &str) -> Retained<NSTextField> {
+    let line = note(mtm, text, PANE_WIDTH);
+    line.setAlignment(NSTextAlignment::Center);
+    line
 }
 
 /// The hotkey, start at login, and what closing this window does.
