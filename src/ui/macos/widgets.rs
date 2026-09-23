@@ -5,9 +5,9 @@ use objc2::runtime::{AnyObject, Sel};
 use objc2::{MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
     NSBox, NSBoxType, NSButton, NSColor, NSControlSize, NSControlStateValueOff,
-    NSControlStateValueOn, NSFont, NSFontWeightSemibold, NSLayoutAttribute, NSMenuItem,
-    NSProgressIndicator, NSProgressIndicatorStyle, NSStackView, NSSwitch, NSTextField,
-    NSTitlePosition, NSUserInterfaceLayoutOrientation, NSView,
+    NSControlStateValueOn, NSFont, NSFontWeightSemibold, NSLayoutAttribute,
+    NSLayoutConstraintOrientation, NSMenuItem, NSProgressIndicator, NSProgressIndicatorStyle,
+    NSStackView, NSSwitch, NSTextField, NSTitlePosition, NSUserInterfaceLayoutOrientation, NSView,
 };
 use objc2_foundation::{NSSize, NSString};
 
@@ -86,6 +86,22 @@ pub fn fixed_width(view: &NSView, width: f64) {
     view.widthAnchor()
         .constraintEqualToConstant(width)
         .setActive(true);
+}
+
+/// Pins a view's height, so rows keep their size when controls in them are
+/// shown or hidden.
+pub fn fixed_height(view: &NSView, height: f64) {
+    view.heightAnchor()
+        .constraintEqualToConstant(height)
+        .setActive(true);
+}
+
+/// An empty view that takes up the free space in a row, pushing the views
+/// after it to the far end.
+pub fn spacer(mtm: MainThreadMarker) -> Retained<NSView> {
+    let view = NSView::new(mtm);
+    view.setContentHuggingPriority_forOrientation(1.0, NSLayoutConstraintOrientation::Horizontal);
+    view
 }
 
 /// Semibold 13 pt text for item names, as in System Settings.

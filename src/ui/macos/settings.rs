@@ -7,15 +7,16 @@ use objc2::runtime::AnyObject;
 use objc2::{MainThreadMarker, sel};
 use objc2_app_kit::{
     NSApplication, NSBox, NSButton, NSColor, NSFont, NSImage, NSLayoutAttribute,
-    NSProgressIndicator, NSStackView, NSStackViewGravity, NSTabViewController,
-    NSTabViewControllerTabStyle, NSTabViewItem, NSTextField, NSUserInterfaceLayoutOrientation,
-    NSView, NSViewController, NSWindow, NSWindowStyleMask,
+    NSProgressIndicator, NSStackView, NSStackViewDistribution, NSStackViewGravity,
+    NSTabViewController, NSTabViewControllerTabStyle, NSTabViewItem, NSTextField,
+    NSUserInterfaceLayoutOrientation, NSView, NSViewController, NSWindow, NSWindowStyleMask,
 };
 use objc2_foundation::{NSEdgeInsets, NSSize, NSString};
 
 use super::actions::Actions;
 use super::widgets::{
-    button, card, fixed_width, label, note, progress_bar, semibold, separator, stack, switch,
+    button, card, fixed_height, fixed_width, label, note, progress_bar, semibold, separator,
+    spacer, stack, switch,
 };
 use crate::config::Config;
 use crate::daemon::Controls;
@@ -119,7 +120,7 @@ pub fn refresh_models(rows: &[ModelRow], state: &ModelsState) {
         let (badge, color) = if current && installed {
             ("In use", NSColor::systemGreenColor())
         } else if model == ModelId::DEFAULT {
-            ("Recommended", NSColor::controlAccentColor())
+            ("Recommended", NSColor::systemBlueColor())
         } else {
             ("", NSColor::secondaryLabelColor())
         };
@@ -262,17 +263,17 @@ fn model_card(
         6.0,
         &[&row.download, &row.choose, &row.delete],
     );
-    // Top line: name and badge on the left, buttons on the right. Spanning
-    // the full card width is what pushes the buttons to its edge.
-    let top = NSStackView::new(mtm);
-    top.setOrientation(horizontal);
-    top.setAlignment(NSLayoutAttribute::CenterY);
+    // Top line: name and badge, a spacer that takes the free space, then the
+    // buttons, so they stay at the right edge whichever are visible. Fixed
+    // heights keep every card the same size as buttons come and go.
     let heading = stack(mtm, horizontal, 8.0, &[&name, &row.badge]);
-    top.addView_inGravity(&heading, NSStackViewGravity::Leading);
-    top.addView_inGravity(&buttons, NSStackViewGravity::Trailing);
+    let top = stack(mtm, horizontal, 8.0, &[&heading, &spacer(mtm), &buttons]);
+    top.setDistribution(NSStackViewDistribution::Fill);
     fixed_width(&top, CARD_INNER);
+    fixed_height(&top, 22.0);
 
     let status_line = stack(mtm, horizontal, 8.0, &[&row.progress, &row.status]);
+    fixed_height(&status_line, 16.0);
     let content = stack(
         mtm,
         NSUserInterfaceLayoutOrientation::Vertical,
