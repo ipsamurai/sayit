@@ -238,7 +238,7 @@ fn permissions_pane(
 
     let mic_test = label(
         mtm,
-        "Records one second, then shows whether sayit heard you.",
+        "Records 1.5 seconds, then shows whether sayit heard you.",
     );
     mic_test.setFont(Some(&NSFont::systemFontOfSize(11.0)));
     mic_test.setTextColor(Some(&NSColor::secondaryLabelColor()));

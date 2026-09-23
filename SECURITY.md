@@ -28,7 +28,7 @@ What sayit does by design:
 - It runs with the user's own privileges and asks only for **Microphone** and **Accessibility**, which it needs to detect the hotkey and paste. It doesn't need admin rights.
 - On macOS, the app is signed with the **Hardened Runtime** and a single entitlement, `com.apple.security.device.audio-input`. This blocks code injection (e.g. `DYLD_INSERT_LIBRARIES`) that would otherwise let another process borrow sayit's permissions.
 - The global hotkey listener sees every key event, but only to match the configured hotkey. Keys are never stored, logged or sent anywhere.
-- The microphone is open only while the hotkey is held.
+- The microphone is open only while the hotkey is held, or for 1.5 seconds when the user clicks Test Microphone in Settings. The test audio stays in memory and is discarded after measuring its level.
 - Pasted text passes through the system clipboard for about 250 ms. It's marked Transient/Concealed so clipboard managers skip it, and your previous clipboard is restored afterwards. Other apps running as the same user can still read the clipboard during that window. That's a limitation of pasting through the clipboard, not something sayit can prevent.
 - On Linux, the udev rule in the README gives every program the user runs access to input devices, which Wayland global hotkeys require. The README calls out this trade-off.
 

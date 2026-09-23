@@ -12,6 +12,8 @@ sayit keeps only these files, all in `~/Library/Application Support/sayit/` on m
 | `models/` | The speech model you downloaded |
 | `sayit.lock` | An empty file that stops two copies of sayit from running |
 
+sayit also asks macOS every 2 seconds whether it still has its two permissions, so it can warn you if one is revoked. That's a local check; nothing is sent anywhere.
+
 **Never stored:**
 - **Audio:** held in memory only while you hold the hotkey, then discarded.
 - **What you dictate:** it's pasted into your app and then forgotten. It's never written to disk or to logs, and it's printed only if you run `sayit` with `-v` in your own terminal.
@@ -36,7 +38,7 @@ sayit asks macOS for only two permissions:
 
 | Permission | Why | What it can't do |
 |---|---|---|
-| **Microphone** | To hear you while you hold the hotkey | The mic is open **only** while the key is held; macOS's orange microphone dot confirms this. Nothing is recorded to disk. |
+| **Microphone** | To hear you while you hold the hotkey | The mic is open **only** while the key is held, or for 1.5 seconds when you click **Test Microphone** in Settings. macOS's orange microphone dot confirms this. Nothing is recorded to disk. |
 | **Accessibility** | To notice the hotkey from any app, and to paste the text with ⌘V | sayit uses it only to watch for your hotkey and to send ⌘V. It never records, stores or sends your other keystrokes. |
 
 These permissions belong to **sayit alone**. They give no extra access to any other app, and they don't change how the rest of your system works. You can see and revoke them at any time in **System Settings › Privacy & Security** (the Microphone and Accessibility sections), or with:
@@ -55,7 +57,7 @@ You don't have to take our word for any of this:
 - **Network:** while sayit is running, `lsof -a -i -p $(pgrep -x sayit)` lists its network connections, and it prints nothing. You can also watch it with a firewall such as [LuLu](https://objective-see.org/products/lulu.html) or Little Snitch.
 - **No networking code:** in the source folder, `cargo tree -e normal | grep -iE 'http|reqwest|hyper|tokio'` prints nothing.
 - **Permissions requested:** `codesign -d --entitlements - /Applications/sayit.app` shows a single entitlement, microphone access.
-- **Microphone use:** the orange dot in the menu bar appears only while you hold the hotkey.
+- **Microphone use:** the orange dot in the menu bar appears only while you hold the hotkey (or during a Test Microphone you started).
 - **Stored files:** `ls -la ~/Library/Application\ Support/sayit/` shows everything sayit keeps.
 - **The code itself:** it's all on GitHub, and you can build it yourself instead of using a downloaded app.
 

@@ -34,6 +34,8 @@ pub struct Ivars {
     settings: OnceCell<SettingsWindow>,
     /// Whether the permission watcher thread is running.
     watching: Cell<bool>,
+    /// A microphone test is recording; further clicks are ignored.
+    testing_mic: Cell<bool>,
     setup: OnceCell<Setup>,
     /// Model cards in Settings and in the setup assistant, kept in sync.
     model_rows: RefCell<Vec<ModelRow>>,
@@ -177,6 +179,9 @@ define_class!(
         /// actually heard anything. The audio is discarded.
         #[unsafe(method(testMicrophone:))]
         fn test_microphone(&self, _sender: Option<&AnyObject>) {
+            if self.ivars().testing_mic.replace(true) {
+                return;
+            }
             self.show_mic_test("Listening… say something.", NSColor::secondaryLabelColor());
             let device = self.controls().input_device();
             std::thread::spawn(move || {
@@ -186,6 +191,7 @@ define_class!(
                     samples.iter().fold(0.0f32, |peak, s| peak.max(s.abs()))
                 });
                 DispatchQueue::main().exec_async(move || {
+                    with_actions(|a| a.ivars().testing_mic.set(false));
                     with_actions(|a| match heard {
                         Ok(peak) if peak > 0.02 => {
                             a.show_mic_test("✓ sayit can hear you.", NSColor::systemGreenColor())
@@ -277,6 +283,7 @@ impl Actions {
             controls,
             settings: OnceCell::new(),
             watching: Cell::new(false),
+            testing_mic: Cell::new(false),
             setup: OnceCell::new(),
             model_rows: RefCell::new(Vec::new()),
             download: RefCell::new(None),
