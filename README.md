@@ -79,6 +79,7 @@ hotkey = "OptRight"            # or "Fn", "CtrlRight", "Ctrl+Alt+Space"
 mode = "hold"                  # or "toggle": press once to start, again to stop
 model = "parakeet-v2"
 restore_clipboard = true       # put your previous clipboard back after pasting
+remove_fillers = true          # drop "um", "uh", "erm" from what you dictate
 unload_after_idle_mins = 0     # e.g. 10 to free ~1 GB of RAM when idle (reload takes <1 s)
 max_recording_secs = 300       # capped at 3600
 # input_device = "Built-in Microphone"   # unset = system default

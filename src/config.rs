@@ -24,6 +24,8 @@ pub struct Config {
     pub model: ModelId,
     /// Put the previous clipboard contents back after pasting.
     pub restore_clipboard: bool,
+    /// Drop hesitation sounds ("um", "uh", "erm") from transcripts.
+    pub remove_fillers: bool,
     /// Free the model's ~1 GB of RAM after this many idle minutes (0 = never).
     /// Reloading takes under a second.
     pub unload_after_idle_mins: u64,
@@ -42,6 +44,7 @@ impl Default for Config {
             mode: Mode::Hold,
             model: ModelId::DEFAULT,
             restore_clipboard: true,
+            remove_fillers: true,
             unload_after_idle_mins: 0,
             max_recording_secs: 300,
             input_device: None,

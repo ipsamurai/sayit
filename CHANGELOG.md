@@ -2,7 +2,12 @@
 
 All notable changes to sayit are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - Unreleased
+## [Unreleased]
+
+### Added
+- Filler-word removal: "um", "uh", "erm" and similar hesitation sounds are dropped from transcripts, with punctuation and capitalization tidied up. Turn it off with `remove_fillers = false`.
+
+## [0.1.0] - 2026-09-23
 
 The first public release.
 

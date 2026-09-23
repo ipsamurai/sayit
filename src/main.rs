@@ -11,6 +11,7 @@ mod daemon;
 mod inject;
 mod paths;
 mod stt;
+mod text;
 mod tray;
 
 #[derive(Parser)]

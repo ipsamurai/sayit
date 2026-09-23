@@ -18,6 +18,7 @@ use crate::audio::{self, Recorder};
 use crate::config::{Config, Mode};
 use crate::inject::Injector;
 use crate::stt::{self, ModelId};
+use crate::text;
 
 /// Presses shorter than this are treated as accidental (e.g. Opt+key combos).
 const MIN_HOLD: Duration = Duration::from_millis(250);
@@ -344,6 +345,10 @@ fn transcribe_and_paste(
         }
     };
     let t_stt = t.elapsed();
+    let text = if cfg.remove_fillers { text::remove_fillers(&text) } else { text };
+    if text.is_empty() {
+        return; // the take was only "um"s
+    }
     if let Err(e) = injector.paste(&text, cfg.restore_clipboard) {
         eprintln!("paste failed: {e:#}");
     }
