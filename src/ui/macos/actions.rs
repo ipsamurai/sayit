@@ -14,7 +14,8 @@ use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_se
 use objc2_app_kit::{
     NSAlert, NSAlertFirstButtonReturn, NSApplication, NSApplicationActivationPolicy,
     NSApplicationDelegate, NSButton, NSColor, NSControlStateValueOn, NSMenu, NSMenuDelegate,
-    NSMenuItem, NSPopUpButton, NSSegmentedControl, NSSwitch, NSWindow, NSWindowDelegate,
+    NSMenuItem, NSPasteboard, NSPasteboardTypeString, NSPopUpButton, NSSegmentedControl, NSSwitch,
+    NSWindow, NSWindowDelegate,
 };
 use objc2_foundation::{NSNotification, NSObjectProtocol, NSString};
 
@@ -22,7 +23,8 @@ use super::settings::{self, ModelRow, ModelsState, SettingsTab, SettingsWindow, 
 use super::setup::{self, HOTKEYS, Setup, refresh_permissions};
 use super::widgets::check_state;
 use super::{
-    DEFAULT_MIC_TAG, MODEL_MENU, fill_mic_menu, fill_model_menu, save_config, with_actions, with_ui,
+    DEFAULT_MIC_TAG, MODEL_MENU, RECENT_MENU, fill_mic_menu, fill_model_menu, fill_recent_menu,
+    save_config, with_actions, with_ui,
 };
 use super::{login, permissions};
 use crate::audio;
@@ -47,6 +49,8 @@ pub struct Ivars {
     progress: Cell<f64>,
     last_error: RefCell<Option<(ModelId, String)>>,
     on_close: Cell<OnClose>,
+    /// The dictations listed in the Recent Dictations menu when it opened.
+    recent_shown: RefCell<Vec<String>>,
 }
 
 define_class!(
@@ -164,13 +168,44 @@ define_class!(
             save_config(|cfg| cfg.on_close = on_close);
         }
 
+        #[unsafe(method(chooseHistorySize:))]
+        fn choose_history_size(&self, menu: &NSPopUpButton) {
+            if let Some(&size) = settings::HISTORY_SIZES.get(menu.indexOfSelectedItem() as usize) {
+                self.controls().set_history_size(size);
+                save_config(|cfg| cfg.history_size = size);
+            }
+        }
+
+        /// Copies a recent dictation, as if the user had selected it and
+        /// pressed ⌘C.
+        #[unsafe(method(copyRecent:))]
+        fn copy_recent(&self, item: &NSMenuItem) {
+            let shown = self.ivars().recent_shown.borrow();
+            if let Some(text) = shown.get(item.tag() as usize) {
+                let pasteboard = NSPasteboard::generalPasteboard();
+                pasteboard.clearContents();
+                // SAFETY: NSPasteboardTypeString is an immutable framework constant.
+                let string_type = unsafe { NSPasteboardTypeString };
+                pasteboard.setString_forType(&NSString::from_str(text), string_type);
+            }
+        }
+
+        #[unsafe(method(clearRecent:))]
+        fn clear_recent(&self, _sender: Option<&AnyObject>) {
+            self.controls().clear_history();
+            self.ivars().recent_shown.borrow_mut().clear();
+        }
+
         #[unsafe(method(toggleSetting:))]
         fn toggle_setting(&self, switch: &NSSwitch) {
             let Some(&toggle) = Toggle::ALL.get(switch.tag() as usize) else {
                 return;
             };
             let on = switch.state() == NSControlStateValueOn;
-            toggle.flag(self.controls()).store(on, Ordering::Relaxed);
+            match toggle {
+                Toggle::KeepHistory => self.controls().set_keep_history(on),
+                _ => toggle.flag(self.controls()).store(on, Ordering::Relaxed),
+            }
             save_config(|cfg| *toggle.field(cfg) = on);
         }
 
@@ -324,10 +359,14 @@ define_class!(
         /// devices and newly downloaded models show up.
         #[unsafe(method(menuNeedsUpdate:))]
         fn menu_needs_update(&self, menu: &NSMenu) {
-            if menu.title().to_string() == MODEL_MENU {
-                fill_model_menu(self, menu);
-            } else {
-                fill_mic_menu(self, menu);
+            match menu.title().to_string().as_str() {
+                MODEL_MENU => fill_model_menu(self, menu),
+                RECENT_MENU => {
+                    let shown = self.controls().recent();
+                    fill_recent_menu(self, menu, &shown);
+                    *self.ivars().recent_shown.borrow_mut() = shown;
+                }
+                _ => fill_mic_menu(self, menu),
             }
         }
     }
@@ -346,6 +385,7 @@ impl Actions {
             progress: Cell::new(0.0),
             last_error: RefCell::new(None),
             on_close: Cell::new(OnClose::MenuBar),
+            recent_shown: RefCell::new(Vec::new()),
         });
         // SAFETY: NSObject's designated initializer, called once on a fresh
         // allocation whose ivars are already set.

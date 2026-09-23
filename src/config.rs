@@ -44,6 +44,12 @@ pub struct Config {
     pub remove_fillers: bool,
     /// End each take with a line break (otherwise a space).
     pub newline_after_take: bool,
+    /// Keep the last few dictations in memory for the menu bar's Recent
+    /// Dictations. Never written to disk. Off unless the user turns it on
+    /// (PRIVACY.md promises that).
+    pub keep_history: bool,
+    /// How many to keep (1 to 10).
+    pub history_size: usize,
     /// Free the model's ~1 GB of RAM after this many idle minutes (0 = never).
     /// Reloading takes under a second.
     pub unload_after_idle_mins: u64,
@@ -68,6 +74,8 @@ impl Default for Config {
             restore_clipboard: true,
             remove_fillers: true,
             newline_after_take: true,
+            keep_history: false,
+            history_size: 10,
             unload_after_idle_mins: 0,
             max_recording_secs: 300,
             input_device: None,

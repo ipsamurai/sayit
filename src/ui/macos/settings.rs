@@ -6,10 +6,10 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{MainThreadMarker, sel};
 use objc2_app_kit::{
-    NSBox, NSButton, NSColor, NSFont, NSImage, NSLayoutAttribute, NSProgressIndicator, NSStackView,
-    NSStackViewDistribution, NSStackViewGravity, NSSwitch, NSTabViewController,
-    NSTabViewControllerTabStyle, NSTabViewItem, NSTextField, NSUserInterfaceLayoutOrientation,
-    NSView, NSViewController, NSWindow, NSWindowStyleMask,
+    NSBox, NSButton, NSColor, NSFont, NSImage, NSProgressIndicator, NSStackView,
+    NSStackViewDistribution, NSSwitch, NSTabViewController, NSTabViewControllerTabStyle,
+    NSTabViewItem, NSTextField, NSUserInterfaceLayoutOrientation, NSView, NSViewController,
+    NSWindow, NSWindowStyleMask,
 };
 use objc2_foundation::{NSEdgeInsets, NSSize, NSString};
 
@@ -18,25 +18,28 @@ use super::login::Login;
 use super::setup::{HotkeyPicker, PermissionRow, hotkey_card, permission_card};
 use super::widgets::{
     button, card, card_row, check_state, fixed_height, fixed_width, label, note, popup,
-    progress_bar, rows_card, semibold, separator, spacer, stack, switch,
+    progress_bar, rows_card, semibold, spacer, stack, switch,
 };
 use crate::config::{Config, OnClose};
 use crate::daemon::Controls;
 use crate::stt::ModelId;
 
-/// On/off settings shown as switches. The switch tag is the index in `ALL`.
+/// On/off settings shown as switches. The switch tag is the index in `ALL`
+/// (declaration order).
 #[derive(Clone, Copy)]
 pub enum Toggle {
     RemoveFillers,
     NewlineAfterTake,
     RestoreClipboard,
+    KeepHistory,
 }
 
 impl Toggle {
-    pub const ALL: [Toggle; 3] = [
+    pub const ALL: [Toggle; 4] = [
         Toggle::RemoveFillers,
         Toggle::NewlineAfterTake,
         Toggle::RestoreClipboard,
+        Toggle::KeepHistory,
     ];
 
     pub fn title(self) -> &'static str {
@@ -44,6 +47,7 @@ impl Toggle {
             Toggle::RemoveFillers => "Remove filler words",
             Toggle::NewlineAfterTake => "Start each dictation on a new line",
             Toggle::RestoreClipboard => "Restore my clipboard after pasting",
+            Toggle::KeepHistory => "Keep recent dictations",
         }
     }
 
@@ -52,6 +56,9 @@ impl Toggle {
             Toggle::RemoveFillers => "Drops \"um\", \"uh\" and \"erm\".",
             Toggle::NewlineAfterTake => "Off adds a space instead. Turn off for terminals.",
             Toggle::RestoreClipboard => "Puts back what you had copied before dictating.",
+            Toggle::KeepHistory => {
+                "Copy them again from the menu bar. Kept in memory only, gone when sayit quits."
+            }
         }
     }
 
@@ -61,6 +68,7 @@ impl Toggle {
             Toggle::RemoveFillers => &controls.remove_fillers,
             Toggle::NewlineAfterTake => &controls.newline_after_take,
             Toggle::RestoreClipboard => &controls.restore_clipboard,
+            Toggle::KeepHistory => &controls.keep_history,
         }
     }
 
@@ -70,6 +78,7 @@ impl Toggle {
             Toggle::RemoveFillers => &mut cfg.remove_fillers,
             Toggle::NewlineAfterTake => &mut cfg.newline_after_take,
             Toggle::RestoreClipboard => &mut cfg.restore_clipboard,
+            Toggle::KeepHistory => &mut cfg.keep_history,
         }
     }
 }
@@ -80,6 +89,9 @@ pub const ON_CLOSE: [(OnClose, &str); 3] = [
     (OnClose::Dock, "Keep running, also in the Dock"),
     (OnClose::Quit, "Quit sayit"),
 ];
+
+/// Choices for how many recent dictations to keep.
+pub const HISTORY_SIZES: [usize; 3] = [3, 5, 10];
 
 /// Width of every tab's content; cards and text are laid out to fit it.
 pub const PANE_WIDTH: f64 = 520.0;
@@ -162,7 +174,9 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<M
     let cfg = Config::load().unwrap_or_default();
     let (general_pane, hotkey, login_switch, login_note) = general_pane(mtm, target, &cfg);
     let (models_pane, rows) = models_pane(mtm, target);
-    let text_pane = text_pane(mtm, target, actions.controls());
+    let controls = actions.controls();
+    let text_pane = text_pane(mtm, target, controls);
+    let clipboard_pane = clipboard_pane(mtm, target, controls, &cfg);
     let (permissions_pane, permission_rows, mic_test) = permissions_pane(mtm, target);
 
     let tabs = NSTabViewController::new(mtm);
@@ -171,6 +185,7 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<M
         ("General", "gearshape", &general_pane),
         ("Models", "cpu", &models_pane),
         ("Text", "textformat", &text_pane),
+        ("Clipboard", "doc.on.clipboard", &clipboard_pane),
         ("Permissions", "lock.shield", &permissions_pane),
     ] {
         let controller = NSViewController::new(mtm);
@@ -248,7 +263,7 @@ impl SettingsWindow {
 #[derive(Clone, Copy)]
 pub enum SettingsTab {
     Models = 1,
-    Permissions = 3,
+    Permissions = 4,
 }
 
 /// The hotkey, start at login, and what closing this window does.
@@ -459,37 +474,71 @@ fn small_label(
     field
 }
 
+/// Switch rows for some of the `Toggle`s.
+fn toggle_rows(
+    mtm: MainThreadMarker,
+    target: &AnyObject,
+    controls: &Controls,
+    toggles: &[Toggle],
+) -> Vec<Retained<NSStackView>> {
+    toggles
+        .iter()
+        .map(|&toggle| {
+            let on = toggle.flag(controls).load(Ordering::Relaxed);
+            let control = switch(mtm, on, target, sel!(toggleSetting:), toggle as isize);
+            card_row(
+                mtm,
+                None,
+                &label(mtm, toggle.title()),
+                &note(mtm, toggle.explanation(), CARD_INNER - 70.0),
+                Some(&control),
+                CARD_INNER,
+            )
+        })
+        .collect()
+}
+
 fn text_pane(
     mtm: MainThreadMarker,
     target: &AnyObject,
     controls: &Controls,
 ) -> Retained<NSStackView> {
-    let rows = NSStackView::new(mtm);
-    rows.setOrientation(NSUserInterfaceLayoutOrientation::Vertical);
-    rows.setSpacing(10.0);
-    for (i, toggle) in Toggle::ALL.into_iter().enumerate() {
-        if i > 0 {
-            rows.addArrangedSubview(&separator(mtm, CARD_INNER));
-        }
-        let on = toggle.flag(controls).load(Ordering::Relaxed);
-        let texts = stack(
-            mtm,
-            NSUserInterfaceLayoutOrientation::Vertical,
-            3.0,
-            &[
-                &label(mtm, toggle.title()),
-                &note(mtm, toggle.explanation(), CARD_INNER - 70.0),
-            ],
-        );
-        let row = NSStackView::new(mtm);
-        row.setOrientation(NSUserInterfaceLayoutOrientation::Horizontal);
-        row.setAlignment(NSLayoutAttribute::CenterY);
-        row.addView_inGravity(&texts, NSStackViewGravity::Leading);
-        let switch = switch(mtm, on, target, sel!(toggleSetting:), i as isize);
-        row.addView_inGravity(&switch, NSStackViewGravity::Trailing);
-        fixed_width(&row, CARD_INNER);
-        rows.addArrangedSubview(&row);
-    }
+    let toggles = [Toggle::RemoveFillers, Toggle::NewlineAfterTake];
+    let rows = toggle_rows(mtm, target, controls, &toggles);
+    let refs: Vec<&NSView> = rows.iter().map(|r| -> &NSView { r }).collect();
     let intro = note(mtm, "Changes apply to your next dictation.", PANE_WIDTH);
-    pane(mtm, &[&intro, &card(mtm, &rows, PANE_WIDTH)])
+    pane(mtm, &[&intro, &rows_card(mtm, &refs, PANE_WIDTH)])
+}
+
+/// Restoring the clipboard, and the recent dictations in the menu bar.
+fn clipboard_pane(
+    mtm: MainThreadMarker,
+    target: &AnyObject,
+    controls: &Controls,
+    cfg: &Config,
+) -> Retained<NSStackView> {
+    let toggles = [Toggle::RestoreClipboard, Toggle::KeepHistory];
+    let mut rows = toggle_rows(mtm, target, controls, &toggles);
+    let titles = HISTORY_SIZES.map(|n| n.to_string());
+    let titles: Vec<&str> = titles.iter().map(String::as_str).collect();
+    let selected = HISTORY_SIZES
+        .iter()
+        .position(|&n| n == cfg.history_size)
+        .unwrap_or(HISTORY_SIZES.len() - 1);
+    let size = popup(mtm, &titles, selected, target, sel!(chooseHistorySize:));
+    rows.push(card_row(
+        mtm,
+        None,
+        &label(mtm, "How many to keep"),
+        &note(mtm, "The oldest drops off first.", CARD_INNER - 120.0),
+        Some(&size),
+        CARD_INNER,
+    ));
+    let refs: Vec<&NSView> = rows.iter().map(|r| -> &NSView { r }).collect();
+    let intro = note(
+        mtm,
+        "Menu bar › Recent Dictations: click one to copy it.",
+        PANE_WIDTH,
+    );
+    pane(mtm, &[&intro, &rows_card(mtm, &refs, PANE_WIDTH)])
 }

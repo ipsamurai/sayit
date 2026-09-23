@@ -55,10 +55,11 @@ The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it o
 | To… | Do this |
 |---|---|
 | Dictate | Hold the hotkey (default **Right Option**), speak, release |
+| Copy a recent dictation | Turn on **Keep recent dictations** (setup or Settings › **Clipboard**), then menu bar › **Recent Dictations** › click one. Kept in memory only; **Clear Recent** forgets them. |
 | Change the hotkey | Settings › **General**: pick the key and Hold or Toggle. It works straight away, no restart. |
 | Pause | Menu bar › **Pause Dictation**. The hotkey is ignored and any take in progress is discarded. |
 | Choose a microphone | Menu bar › **Microphone** |
-| Change settings | Menu bar › **Settings…** (⌘,): General, Models, Text and Permissions tabs. Changes apply immediately. |
+| Change settings | Menu bar › **Settings…** (⌘,): General, Models, Text, Clipboard and Permissions tabs. Changes apply immediately. |
 | Start at login, Dock icon | Settings › **General**: **Start sayit at login**, and what closing Settings does: keep running in the menu bar (default), keep running with a Dock icon too, or quit. |
 | Check permissions | Settings › **Permissions**: a live checklist, a **Test Microphone** button, and step-by-step fixes. The menu bar shows **Fix Permissions…** if one goes missing. |
 | Quit | Menu bar › **Quit sayit** (⌘Q) |
@@ -86,6 +87,8 @@ model = "parakeet-v2"
 restore_clipboard = true       # put your previous clipboard back after pasting
 remove_fillers = true          # drop "um", "uh", "erm" from what you dictate
 newline_after_take = true      # each dictation ends with a line break (false: a space)
+keep_history = false           # true: menu bar › Recent Dictations (memory only)
+history_size = 10              # how many to keep: 1 to 10
 unload_after_idle_mins = 0     # e.g. 10 to free ~1 GB of RAM when idle (reload takes <1 s)
 max_recording_secs = 300       # capped at 3600
 # input_device = "Built-in Microphone"   # unset = system default
@@ -147,7 +150,7 @@ sayit collects no data and needs no account. The full details, including how to 
   - the speech model, fetched by `scripts/fetch-models.sh` from a pinned revision, with every file checked against its SHA-256 hash;
   - ONNX Runtime, which the `ort` crate downloads and hash-checks while building.
 - **Audio** stays in memory and is discarded after each dictation. The microphone is open only while you hold the key.
-- **Transcripts** are never written to disk or logs. They're printed only when you run with `-v`.
+- **Transcripts** are never written to disk or logs. They're printed only when you run with `-v`. The optional **Recent Dictations** menu (off by default) keeps the last few in memory only, until sayit quits.
 - **Clipboard.** Pasted text is marked Transient/Concealed so clipboard managers skip it, and your previous clipboard is restored about 250 ms later.
 - **Least privilege.** sayit asks only for Microphone and Accessibility. The app is signed with the macOS Hardened Runtime, which blocks other programs from injecting code to borrow those permissions. Its only entitlement is microphone access.
 

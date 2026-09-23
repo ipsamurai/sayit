@@ -606,10 +606,9 @@ fn text_page(
 ) -> Retained<NSStackView> {
     let rows: Vec<_> = Toggle::ALL
         .into_iter()
-        .enumerate()
-        .map(|(i, toggle)| {
+        .map(|toggle| {
             let on = toggle.flag(controls).load(Ordering::Relaxed);
-            let control = switch(mtm, on, target, sel!(toggleSetting:), i as isize);
+            let control = switch(mtm, on, target, sel!(toggleSetting:), toggle as isize);
             card_row(
                 mtm,
                 None,
@@ -625,7 +624,7 @@ fn text_page(
     page(
         mtm,
         &badge(mtm, "textformat", &NSColor::systemTealColor()),
-        "Tidy up your text",
+        "Text and clipboard",
         "How sayit types what you say. You can change these in Settings.",
         &[&card],
     )

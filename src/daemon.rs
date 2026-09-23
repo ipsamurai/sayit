@@ -5,7 +5,8 @@
 //! The mic is only open while the hotkey is active. The caller's thread stays
 //! free, so a UI can own the main thread (required on macOS).
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -24,6 +25,8 @@ use crate::text;
 const MIN_HOLD: Duration = Duration::from_millis(250);
 /// Upper bound for `max_recording_secs`: an hour of audio is ~200 MB in memory.
 const MAX_RECORDING_SECS: u64 = 3600;
+/// Most recent dictations kept for the menu bar.
+pub const MAX_HISTORY: usize = 10;
 
 enum Job {
     /// Hotkey went down: load the model now so it overlaps with speaking.
@@ -85,6 +88,11 @@ pub struct Controls {
     pub remove_fillers: AtomicBool,
     pub newline_after_take: AtomicBool,
     pub restore_clipboard: AtomicBool,
+    pub keep_history: AtomicBool,
+    history_size: AtomicUsize,
+    /// Recent dictations, newest first, for copying again. Memory only: never
+    /// written to disk, and gone when sayit quits.
+    history: Mutex<VecDeque<String>>,
     /// Hotkey (config name, e.g. "OptRight") and mode. The listener picks up
     /// a change when `hotkey_changed` is set.
     hotkey: Mutex<(String, Mode)>,
@@ -100,9 +108,50 @@ impl Controls {
             remove_fillers: AtomicBool::new(cfg.remove_fillers),
             newline_after_take: AtomicBool::new(cfg.newline_after_take),
             restore_clipboard: AtomicBool::new(cfg.restore_clipboard),
+            keep_history: AtomicBool::new(cfg.keep_history),
+            history_size: AtomicUsize::new(cfg.history_size.clamp(1, MAX_HISTORY)),
+            history: Mutex::new(VecDeque::new()),
             hotkey: Mutex::new((cfg.hotkey.clone(), cfg.mode)),
             hotkey_changed: AtomicBool::new(false),
         })
+    }
+
+    fn history(&self) -> std::sync::MutexGuard<'_, VecDeque<String>> {
+        self.history.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Adds a dictation to the recent list, if that's turned on.
+    pub fn remember(&self, text: &str) {
+        let mut history = self.history();
+        // Checked under the lock, so nothing slips in after `set_keep_history(false)`.
+        if !self.keep_history.load(Ordering::Relaxed) {
+            return;
+        }
+        history.push_front(text.to_string());
+        history.truncate(self.history_size.load(Ordering::Relaxed));
+    }
+
+    /// Newest first.
+    pub fn recent(&self) -> Vec<String> {
+        self.history().iter().cloned().collect()
+    }
+
+    pub fn clear_history(&self) {
+        self.history().clear();
+    }
+
+    /// Turning it off also forgets what was kept.
+    pub fn set_keep_history(&self, on: bool) {
+        self.keep_history.store(on, Ordering::Relaxed);
+        if !on {
+            self.clear_history();
+        }
+    }
+
+    pub fn set_history_size(&self, size: usize) {
+        let size = size.clamp(1, MAX_HISTORY);
+        self.history_size.store(size, Ordering::Relaxed);
+        self.history().truncate(size);
     }
 
     pub fn hotkey(&self) -> (String, Mode) {
@@ -429,6 +478,8 @@ fn transcribe_and_paste(
     if text.is_empty() {
         return; // the take was only "um"s
     }
+    // Before pasting, so a failed paste can still be copied from the menu.
+    controls.remember(&text);
     // Each take ends on a new line, so the next one starts fresh.
     let pasted = if controls.newline_after_take.load(Ordering::Relaxed) {
         format!("{text}\n")
@@ -467,5 +518,31 @@ pub fn accessibility_trusted(prompt: bool) -> bool {
     unsafe {
         let opts = NSDictionary::from_slices(&[kAXTrustedCheckOptionPrompt], &[&*prompt]);
         AXIsProcessTrustedWithOptions(&opts)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn history_keeps_the_newest_and_forgets_when_turned_off() {
+        let controls = Controls::new(&Config {
+            keep_history: true,
+            history_size: 2,
+            ..Config::default()
+        });
+        for text in ["one", "two", "three"] {
+            controls.remember(text);
+        }
+        assert_eq!(controls.recent(), ["three", "two"]);
+
+        controls.set_history_size(1);
+        assert_eq!(controls.recent(), ["three"]);
+
+        controls.set_keep_history(false);
+        assert!(controls.recent().is_empty());
+        controls.remember("four");
+        assert!(controls.recent().is_empty());
     }
 }

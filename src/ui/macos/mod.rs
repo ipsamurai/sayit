@@ -35,6 +35,11 @@ use crate::stt::ModelId;
 
 const MIC_MENU: &str = "Microphone";
 const MODEL_MENU: &str = "Model";
+const RECENT_MENU: &str = "Recent Dictations";
+
+/// Longest menu title for a recent dictation; the tooltip shows more.
+const RECENT_TITLE_CHARS: usize = 60;
+const RECENT_TOOLTIP_CHARS: usize = 1000;
 
 /// Tag of the "System Default" microphone item; device items use tag 0 and
 /// their title is the device name.
@@ -221,9 +226,9 @@ fn status_item(
     menu.addItem(&pause);
     // The Model menu only appears once there is a choice to make.
     let submenus = if ModelId::ALL.len() > 1 {
-        &[MIC_MENU, MODEL_MENU][..]
+        &[MIC_MENU, MODEL_MENU, RECENT_MENU][..]
     } else {
-        &[MIC_MENU]
+        &[MIC_MENU, RECENT_MENU]
     };
     for &title in submenus {
         let item = menu_item(mtm, title, None, "");
@@ -426,6 +431,61 @@ fn fill_model_menu(actions: &Actions, menu: &NSMenu) {
     }
 }
 
+/// Recent dictations, newest first; clicking one copies it. `shown` is what
+/// the items refer to, so a dictation arriving while the menu is open can't
+/// make a click copy a different one.
+fn fill_recent_menu(actions: &Actions, menu: &NSMenu, shown: &[String]) {
+    menu.removeAllItems();
+    let mtm = actions.mtm();
+    if !actions.controls().keep_history.load(Ordering::Relaxed) {
+        menu.addItem(&menu_item(
+            mtm,
+            "Turned off in Settings › Clipboard",
+            None,
+            "",
+        ));
+        return;
+    }
+    if shown.is_empty() {
+        menu.addItem(&menu_item(mtm, "Nothing yet", None, ""));
+        return;
+    }
+    for (i, text) in shown.iter().enumerate() {
+        let item = menu_item(
+            mtm,
+            &shorten(text, RECENT_TITLE_CHARS),
+            Some(sel!(copyRecent:)),
+            "",
+        );
+        item.setTag(i as isize);
+        item.setToolTip(Some(&NSString::from_str(&shorten(
+            text,
+            RECENT_TOOLTIP_CHARS,
+        ))));
+        // SAFETY: `actions` outlives every menu (see `run`).
+        unsafe { item.setTarget(Some(actions as &AnyObject)) };
+        menu.addItem(&item);
+    }
+    menu.addItem(&NSMenuItem::separatorItem(mtm));
+    let clear = menu_item(mtm, "Clear Recent", Some(sel!(clearRecent:)), "");
+    // SAFETY: as above.
+    unsafe { clear.setTarget(Some(actions as &AnyObject)) };
+    menu.addItem(&clear);
+}
+
+/// One line of at most `max` characters, control characters removed.
+fn shorten(text: &str, max: usize) -> String {
+    let line: String = text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    let line = line.trim();
+    match line.char_indices().nth(max) {
+        Some((cut, _)) => format!("{}…", line[..cut].trim_end()),
+        None => line.to_string(),
+    }
+}
+
 /// Changes one setting in config.toml. Re-reads the file so edits made while
 /// sayit runs aren't lost, and never overwrites a file it couldn't parse.
 fn save_config(change: impl FnOnce(&mut Config)) {
@@ -435,5 +495,17 @@ fn save_config(change: impl FnOnce(&mut Config)) {
     });
     if let Err(e) = saved {
         eprintln!("could not save setting: {e:#}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shorten;
+
+    #[test]
+    fn shorten_makes_one_short_line() {
+        assert_eq!(shorten("  hello\nworld\t ", 60), "hello world");
+        assert_eq!(shorten("héllo wörld", 5), "héllo…");
+        assert_eq!(shorten("abc", 3), "abc");
     }
 }
