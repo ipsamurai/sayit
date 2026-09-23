@@ -44,8 +44,8 @@ struct State {
 }
 
 impl Download {
-    /// Stops the download. Partial files are kept, so the next attempt
-    /// resumes where this one stopped; the model isn't usable until complete.
+    /// Stops the download. The caller removes the partial files once it's
+    /// reported as `Finished::Cancelled` (see `delete`).
     pub fn cancel(&self) {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if state.exited {

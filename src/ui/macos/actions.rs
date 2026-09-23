@@ -209,7 +209,13 @@ impl Actions {
         match finished {
             // With nothing usable yet (e.g. first run), use the new model.
             Finished::Installed if !self.controls().model().is_installed() => self.use_model(model),
-            Finished::Installed | Finished::Cancelled => {}
+            Finished::Installed => {}
+            // Cancel means "leave nothing behind": remove the partial files.
+            Finished::Cancelled => {
+                if let Err(e) = models::delete(model) {
+                    *self.ivars().last_error.borrow_mut() = Some((model, format!("{e:#}")));
+                }
+            }
             Finished::Failed(e) => *self.ivars().last_error.borrow_mut() = Some((model, e)),
         }
         self.refresh_models();
