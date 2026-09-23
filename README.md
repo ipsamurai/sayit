@@ -157,11 +157,21 @@ The model isn't part of this repository. `fetch-models.sh` downloads it directly
 
 Contributions are welcome, especially testing on Linux. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md), and the roadmap is in [PLAN.md](PLAN.md).
 
+## Use, forks and contributions
+
+sayit is free to use, copy, modify and share, for personal or commercial purposes.
+
+- **Fork it** and build on it.
+- **Suggest changes** by opening an issue.
+- **Send a pull request.** Changes that fit the project's goals (private, local, light) will be reviewed and may be merged; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+**Credit when you share it.** Using or modifying sayit for yourself needs no permission and no credit. When you **redistribute** it, whether as copies, a published fork, or a project that includes sayit's code, the license requires you to keep the copyright notice. That notice names **ipsamurai** as the original author and links to https://github.com/ipsamurai/sayit. Under Apache-2.0 you must also include the [NOTICE](NOTICE) file. Beyond that, we'd appreciate a mention of the original project in your README.
+
 ## License
 
-Copyright © 2026 The sayit contributors.
+Copyright © 2026 ipsamurai and the sayit contributors ([github.com/ipsamurai/sayit](https://github.com/ipsamurai/sayit)).
 
-sayit is licensed under either the [Apache License, Version 2.0](LICENSE-APACHE) or the [MIT License](LICENSE-MIT), at your option.
+sayit is licensed under either the [Apache License, Version 2.0](LICENSE-APACHE) or the [MIT License](LICENSE-MIT), at your option. Attribution notices are in [NOTICE](NOTICE).
 
 Unless you explicitly state otherwise, any contribution you intentionally submit for inclusion in sayit, as defined in the Apache-2.0 license, is dual licensed as above, without any additional terms or conditions.
 

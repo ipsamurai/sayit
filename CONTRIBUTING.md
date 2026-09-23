@@ -1,6 +1,8 @@
 # Contributing to sayit
 
-Thanks for helping! sayit is small on purpose, and a few rules keep it private, light and trustworthy.
+Thanks for helping! Forks, suggestions and pull requests are all welcome. sayit is small on purpose, and a few rules keep it private, light and trustworthy.
+
+If you build something on top of sayit instead of contributing back, that's fine too. When you share it, keep the copyright notice (and the [NOTICE](NOTICE) file under Apache-2.0); see "Use, forks and contributions" in the README.
 
 ## Ground rules
 
