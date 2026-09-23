@@ -18,7 +18,7 @@ mod inject;
 mod paths;
 mod stt;
 mod text;
-mod tray;
+mod ui;
 
 #[derive(Parser)]
 #[command(version, about = "Local-only dictation")]
@@ -68,8 +68,14 @@ fn main() -> Result<()> {
         }
     };
     match cmd {
-        Cmd::Run { verbose } => daemon::run(config::Config::load()?, verbose),
-        Cmd::App { verbose } => tray::run(config::Config::load()?, verbose),
+        Cmd::Run { verbose } => {
+            let _lock = paths::single_instance_lock()?;
+            daemon::run(config::Config::load()?, verbose)
+        }
+        Cmd::App { verbose } => {
+            let _lock = paths::single_instance_lock()?;
+            ui::run(config::Config::load()?, verbose)
+        }
         Cmd::Listen { model } => listen(model_or_config(model)?),
         Cmd::Transcribe { wav, model } => transcribe_file(&wav, model_or_config(model)?),
     }

@@ -56,6 +56,7 @@ The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it o
 | Dictate | Hold the hotkey (default **Right Option**), speak, release |
 | Pause | Menu bar › **Pause Dictation**. The hotkey is ignored and any take in progress is discarded. |
 | Choose a microphone | Menu bar › **Microphone** |
+| Change settings | Menu bar › **Settings…** (⌘,). Changes apply immediately. |
 | Quit | Menu bar › **Quit sayit** (⌘Q) |
 
 ### Command line

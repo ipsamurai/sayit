@@ -82,6 +82,9 @@ pub struct Controls {
     pub input_device: Mutex<Option<String>>,
     /// Speech model; the worker switches before the next take.
     pub model: Mutex<ModelId>,
+    pub remove_fillers: AtomicBool,
+    pub newline_after_take: AtomicBool,
+    pub restore_clipboard: AtomicBool,
 }
 
 impl Controls {
@@ -90,6 +93,9 @@ impl Controls {
             paused: AtomicBool::new(false),
             input_device: Mutex::new(cfg.input_device.clone()),
             model: Mutex::new(cfg.model),
+            remove_fillers: AtomicBool::new(cfg.remove_fillers),
+            newline_after_take: AtomicBool::new(cfg.newline_after_take),
+            restore_clipboard: AtomicBool::new(cfg.restore_clipboard),
         })
     }
 
@@ -335,7 +341,7 @@ fn worker(
         }
         if let Job::Transcribe(samples) = job {
             if let Some(engine) = engine.as_mut() {
-                transcribe_and_paste(&cfg, engine, &mut injector, &samples, verbose);
+                transcribe_and_paste(&controls, engine, &mut injector, &samples, verbose);
             }
             // The controller counted every Transcribe job as pending.
             reporter.update(|a| a.pending = a.pending.saturating_sub(1));
@@ -344,7 +350,7 @@ fn worker(
 }
 
 fn transcribe_and_paste(
-    cfg: &Config,
+    controls: &Controls,
     engine: &mut stt::Engine,
     injector: &mut Injector,
     samples: &[f32],
@@ -364,7 +370,7 @@ fn transcribe_and_paste(
         }
     };
     let t_stt = t.elapsed();
-    let text = if cfg.remove_fillers {
+    let text = if controls.remove_fillers.load(Ordering::Relaxed) {
         text::remove_fillers(&text)
     } else {
         text
@@ -373,12 +379,12 @@ fn transcribe_and_paste(
         return; // the take was only "um"s
     }
     // Each take ends on a new line, so the next one starts fresh.
-    let pasted = if cfg.newline_after_take {
+    let pasted = if controls.newline_after_take.load(Ordering::Relaxed) {
         format!("{text}\n")
     } else {
         format!("{text} ")
     };
-    if let Err(e) = injector.paste(&pasted, cfg.restore_clipboard) {
+    if let Err(e) = injector.paste(&pasted, controls.restore_clipboard.load(Ordering::Relaxed)) {
         eprintln!("paste failed: {e:#}");
     }
     if verbose {
