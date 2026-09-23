@@ -1699,6 +1699,7 @@ dependencies = [
  "evdev",
  "handy-keys",
  "hound",
+ "libc",
  "objc2",
  "objc2-app-kit",
  "objc2-core-graphics",
