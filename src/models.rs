@@ -9,7 +9,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 
@@ -56,6 +56,21 @@ impl Download {
         // (see `start`) that hasn't been reaped yet, so this stops the
         // script and its curl and nothing else.
         unsafe { libc::killpg(self.pid as libc::pid_t, libc::SIGTERM) };
+    }
+
+    /// Cancels, then waits up to `timeout` for the script to exit. For when
+    /// sayit quits: `Finished` is never delivered then, so the caller removes
+    /// the partial files itself, but only once this returns true.
+    pub fn cancel_and_wait(&self, timeout: Duration) -> bool {
+        self.cancel();
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            if self.state.lock().unwrap_or_else(|e| e.into_inner()).exited {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        false
     }
 }
 

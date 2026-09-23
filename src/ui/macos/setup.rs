@@ -1,7 +1,7 @@
 //! The setup assistant shown on first launch. Each page is a centred icon,
 //! title and one-line subtitle above a card of controls. Finishing it saves
-//! `setup_complete` and starts dictation. Closing or quitting partway is fine:
-//! "Continue Setup…" in the menu bar reopens it, and so does the next launch.
+//! `setup_complete`, adds the menu-bar icon and starts dictation. Closing it
+//! partway quits sayit; it starts again on the next launch.
 
 use std::cell::Cell;
 use std::sync::atomic::Ordering;
@@ -274,9 +274,8 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions, cfg: &Config) -> (Setup, 
     );
 
     let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, height + 60.0));
-    // Closing only hides the window: "Continue Setup…" in the menu bar brings
-    // it back on the same page, and it reappears next launch until finished.
-    // Not resizable: the pages have a fixed layout.
+    // Closing quits sayit (see `Actions::window_will_close`). Not resizable:
+    // the pages have a fixed layout.
     let style =
         NSWindowStyleMask::Titled | NSWindowStyleMask::Closable | NSWindowStyleMask::Miniaturizable;
     // SAFETY: standard NSWindow initializer with a valid frame and style.

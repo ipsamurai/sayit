@@ -5,16 +5,18 @@
 use std::cell::{Cell, OnceCell, RefCell};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use dispatch2::DispatchQueue;
 use objc2::rc::Retained;
-use objc2::runtime::{AnyObject, NSObject};
+use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{
-    NSAlert, NSAlertFirstButtonReturn, NSButton, NSColor, NSControlStateValueOn, NSMenu,
-    NSMenuDelegate, NSMenuItem, NSPopUpButton, NSSegmentedControl, NSSwitch,
+    NSAlert, NSAlertFirstButtonReturn, NSApplication, NSApplicationDelegate, NSButton, NSColor,
+    NSControlStateValueOn, NSMenu, NSMenuDelegate, NSMenuItem, NSPopUpButton, NSSegmentedControl,
+    NSSwitch, NSWindowDelegate,
 };
-use objc2_foundation::{NSObjectProtocol, NSString};
+use objc2_foundation::{NSNotification, NSObjectProtocol, NSString};
 
 use super::permissions;
 use super::settings::{self, ModelRow, ModelsState, SettingsTab, SettingsWindow, Toggle};
@@ -186,7 +188,7 @@ define_class!(
             let device = self.controls().input_device();
             std::thread::spawn(move || {
                 let heard = audio::Recorder::start(device.as_deref()).map(|rec| {
-                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    std::thread::sleep(Duration::from_millis(1500));
                     let samples = rec.stop();
                     samples.iter().fold(0.0f32, |peak, s| peak.max(s.abs()))
                 });
@@ -204,11 +206,6 @@ define_class!(
                     })
                 });
             });
-        }
-
-        #[unsafe(method(showSetup:))]
-        fn show_setup_clicked(&self, _sender: Option<&AnyObject>) {
-            self.show_setup();
         }
 
         #[unsafe(method(showPermissions:))]
@@ -256,12 +253,35 @@ define_class!(
                 return;
             }
             save_config(|cfg| cfg.setup_complete = true);
+            // orderOut, not close: closing the setup window quits sayit.
             setup.window.orderOut(None);
-            super::finish_setup();
+            super::finish_setup(self);
         }
     }
 
     unsafe impl NSObjectProtocol for Actions {}
+
+    unsafe impl NSApplicationDelegate for Actions {
+        #[unsafe(method(applicationWillTerminate:))]
+        fn application_will_terminate(&self, _notification: &NSNotification) {
+            self.stop_download();
+        }
+    }
+
+    unsafe impl NSWindowDelegate for Actions {
+        /// Closing the setup window quits sayit: nothing runs until setup is
+        /// finished, and it starts again on the next launch.
+        #[unsafe(method(windowWillClose:))]
+        fn window_will_close(&self, notification: &NSNotification) {
+            let closing = notification.object();
+            let is_setup = self.ivars().setup.get().is_some_and(|setup| {
+                closing.as_deref().is_some_and(|w| std::ptr::eq(w, &**setup.window as &AnyObject))
+            });
+            if is_setup {
+                NSApplication::sharedApplication(self.mtm()).terminate(None);
+            }
+        }
+    }
 
     unsafe impl NSMenuDelegate for Actions {
         /// Rebuilds a submenu each time it opens, so newly connected
@@ -336,6 +356,9 @@ impl Actions {
             fresh = true;
             let cfg = Config::load().unwrap_or_default();
             let (setup, rows) = setup::build(self.mtm(), self, &cfg);
+            setup
+                .window
+                .setDelegate(Some(ProtocolObject::from_ref(self)));
             self.ivars().model_rows.borrow_mut().extend(rows);
             setup
         });
@@ -358,7 +381,7 @@ impl Actions {
             .spawn(|| {
                 loop {
                     DispatchQueue::main().exec_async(|| with_actions(|a| a.refresh_permissions()));
-                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    std::thread::sleep(Duration::from_secs(2));
                 }
             })
             .ok();
@@ -389,6 +412,17 @@ impl Actions {
     fn show_hotkey_in_setup(&self) {
         if let (Some(setup), Ok(cfg)) = (self.ivars().setup.get(), Config::load()) {
             setup.show_hotkey(&cfg.hotkey, cfg.mode);
+        }
+    }
+
+    /// Stops a model download when sayit quits, so it doesn't carry on in the
+    /// background, and removes its partial files.
+    fn stop_download(&self) {
+        if let Some((model, download)) = self.ivars().download.borrow_mut().take()
+            && download.cancel_and_wait(Duration::from_secs(2))
+            && let Err(e) = models::delete(model)
+        {
+            eprintln!("could not remove the partial download: {e:#}");
         }
     }
 

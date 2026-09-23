@@ -11,7 +11,7 @@ All notable changes to sayit are documented here. The format follows [Keep a Cha
 - Only one copy of sayit runs at a time; a second copy exits instead of pasting everything twice.
 - Model manager in Settings: download (with progress and cancel), switch or delete Parakeet v2, Parakeet v3, Moonshine Medium and Moonshine Small. Downloads run the bundled, checksum-verifying `fetch-models.sh`, so the app itself still has no network code.
 - On first launch without a model, Settings opens and dictation starts as soon as a download finishes.
-- Setup assistant on first launch: welcome, model download, permissions checklist (live green/red), microphone, hotkey (key and hold/toggle), text options, and a how-to. Closing or quitting partway is safe: the menu bar offers Continue Setup…, and it restarts next launch.
+- Setup assistant on first launch: welcome, model download, permissions checklist (live green/red), microphone, hotkey (key and hold/toggle), text options, and a how-to. The menu-bar icon appears once setup is finished; closing setup partway quits sayit, and setup starts again next launch. Quitting during a model download stops it and removes the partial files.
 - Settings › Permissions: live checklist, Test Microphone (records 1.5 seconds in memory and reports whether it heard you), and manual steps. The menu bar shows Fix Permissions… when macOS reports a permission missing.
 
 ## [0.1.0] - 2026-09-23
