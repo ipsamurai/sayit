@@ -3,6 +3,7 @@
 //! thread; the dictation service runs on background threads (see daemon.rs).
 
 mod actions;
+mod permissions;
 mod settings;
 mod setup;
 mod widgets;
@@ -23,6 +24,7 @@ use objc2_app_kit::{
 use objc2_foundation::NSString;
 
 use actions::Actions;
+use settings::SettingsTab;
 use widgets::{check_state, menu_item};
 
 use crate::audio;
@@ -52,6 +54,11 @@ enum State {
 struct Ui {
     item: Retained<NSStatusItem>,
     status_line: Retained<NSMenuItem>,
+    /// Shown while setup is unfinished, e.g. if its window got hidden.
+    continue_setup: Retained<NSMenuItem>,
+    /// Shown when macOS reports a permission missing.
+    fix_permissions: Retained<NSMenuItem>,
+    permitted: Cell<bool>,
     hotkey: String,
     state: Cell<State>,
     paused: Cell<bool>,
@@ -111,20 +118,24 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
         finish_setup();
     }
     let controls = Controls::new(&cfg);
-    let actions = Actions::new(mtm, controls.clone(), hotkey_name(&cfg.hotkey));
+    let actions = Actions::new(mtm, controls.clone());
     app.setMainMenu(Some(&main_menu(mtm, &actions)));
-    let (item, status_line) = status_item(mtm, &actions);
+    let (item, status_line, continue_setup, fix_permissions) = status_item(mtm, &actions);
     // Kept here for the life of the app: menus and windows hold only weak
     // references to it.
     if needs_setup {
         actions.show_setup();
     }
+    actions.watch_permissions();
     ACTIONS.with(|a| a.set(actions).ok());
 
     UI.with(|ui| {
         let ui = ui.get_or_init(|| Ui {
             item,
             status_line,
+            continue_setup,
+            fix_permissions,
+            permitted: Cell::new(true),
             hotkey: cfg.hotkey.clone(),
             state: Cell::new(if needs_setup {
                 State::SettingUp
@@ -144,6 +155,8 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
             while !SETUP_DONE.load(Ordering::Relaxed) {
                 std::thread::sleep(Duration::from_millis(250));
             }
+            // Setup may have changed the hotkey or mode.
+            let cfg = Config::load().unwrap_or(cfg);
             // Shows the system prompt once if needed, then waits for it.
             if !daemon::accessibility_trusted(true) {
                 set_state(State::NeedsAccessibility);
@@ -156,7 +169,8 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
                 // First run, or the chosen model was deleted: open Settings
                 // so the user can download one, and wait for it.
                 set_state(State::NeedsModel);
-                DispatchQueue::main().exec_async(|| with_actions(|a| a.show_settings()));
+                DispatchQueue::main()
+                    .exec_async(|| with_actions(|a| a.show_settings_tab(SettingsTab::Models)));
                 while !controls.model().is_installed() {
                     std::thread::sleep(Duration::from_secs(1));
                 }
@@ -182,7 +196,12 @@ pub fn run(cfg: Config, verbose: bool) -> Result<()> {
 fn status_item(
     mtm: MainThreadMarker,
     actions: &Actions,
-) -> (Retained<NSStatusItem>, Retained<NSMenuItem>) {
+) -> (
+    Retained<NSStatusItem>,
+    Retained<NSMenuItem>,
+    Retained<NSMenuItem>,
+    Retained<NSMenuItem>,
+) {
     let target: &AnyObject = actions;
     let with_target = |item: &NSMenuItem| {
         // SAFETY: `actions` outlives every menu (see `run`).
@@ -193,6 +212,13 @@ fn status_item(
     // No action = disabled, so it reads as a label.
     let status_line = menu_item(mtm, "", None, "");
     menu.addItem(&status_line);
+    let continue_setup = menu_item(mtm, "Continue Setup…", Some(sel!(showSetup:)), "");
+    let fix_permissions = menu_item(mtm, "Fix Permissions…", Some(sel!(showPermissions:)), "");
+    for item in [&continue_setup, &fix_permissions] {
+        with_target(item);
+        item.setHidden(true);
+        menu.addItem(item);
+    }
     menu.addItem(&NSMenuItem::separatorItem(mtm));
 
     let pause = menu_item(mtm, "Pause Dictation", Some(sel!(togglePause:)), "");
@@ -221,7 +247,7 @@ fn status_item(
 
     let item = NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
     item.setMenu(Some(&menu));
-    (item, status_line)
+    (item, status_line, continue_setup, fix_permissions)
 }
 
 /// A menu-bar-only app never shows its main menu, but AppKit still uses it
@@ -267,7 +293,16 @@ fn main_menu(mtm: MainThreadMarker, actions: &Actions) -> Retained<NSMenu> {
 }
 
 fn render(ui: &Ui) {
+    let setting_up = ui.state.get() == State::SettingUp;
+    ui.continue_setup.setHidden(!setting_up);
+    ui.fix_permissions
+        .setHidden(setting_up || ui.permitted.get());
+    let missing = !setting_up && !ui.permitted.get() && matches!(ui.state.get(), State::Ready(_));
     let (symbol, text) = match (ui.state.get(), ui.paused.get()) {
+        _ if missing => (
+            "exclamationmark.triangle",
+            "A permission is missing: choose Fix Permissions…".to_string(),
+        ),
         (State::SettingUp, _) => ("gearshape", "Finish setting up sayit".to_string()),
         (State::Loading, _) => ("hourglass", "Loading model…".to_string()),
         (State::NeedsAccessibility, _) => (

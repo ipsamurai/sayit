@@ -11,26 +11,29 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{
-    NSAlert, NSAlertFirstButtonReturn, NSButton, NSControlStateValueOn, NSMenu, NSMenuDelegate,
-    NSMenuItem, NSSwitch, NSWindow,
+    NSAlert, NSAlertFirstButtonReturn, NSButton, NSColor, NSControlStateValueOn, NSMenu,
+    NSMenuDelegate, NSMenuItem, NSPopUpButton, NSSegmentedControl, NSSwitch,
 };
 use objc2_foundation::{NSObjectProtocol, NSString};
 
-use super::settings::{self, ModelRow, ModelsState, Toggle};
-use super::setup::{self, Setup};
+use super::permissions;
+use super::settings::{self, ModelRow, ModelsState, SettingsTab, SettingsWindow, Toggle};
+use super::setup::{self, HOTKEYS, Setup, refresh_permissions};
 use super::widgets::check_state;
 use super::{
     DEFAULT_MIC_TAG, MODEL_MENU, fill_mic_menu, fill_model_menu, save_config, with_actions, with_ui,
 };
+use crate::audio;
+use crate::config::{Config, Mode};
 use crate::daemon::Controls;
 use crate::models::{self, Download, Finished};
 use crate::stt::ModelId;
 
 pub struct Ivars {
     controls: Arc<Controls>,
-    /// Shown in the setup assistant's how-to, e.g. "Right Option".
-    hotkey: String,
-    settings: OnceCell<Retained<NSWindow>>,
+    settings: OnceCell<SettingsWindow>,
+    /// Whether the permission watcher thread is running.
+    watching: Cell<bool>,
     setup: OnceCell<Setup>,
     /// Model cards in Settings and in the setup assistant, kept in sync.
     model_rows: RefCell<Vec<ModelRow>>,
@@ -156,6 +159,87 @@ define_class!(
             }
         }
 
+        /// "Allow…" / "Open Settings" in a permissions checklist.
+        #[unsafe(method(allowPermission:))]
+        fn allow_permission(&self, button: &NSButton) {
+            match button.tag() {
+                0 => permissions::request_accessibility(),
+                _ => permissions::request_microphone(),
+            }
+        }
+
+        #[unsafe(method(checkPermissions:))]
+        fn check_permissions(&self, _sender: Option<&AnyObject>) {
+            self.refresh_permissions();
+        }
+
+        /// Records a second in the background, then reports whether sayit
+        /// actually heard anything. The audio is discarded.
+        #[unsafe(method(testMicrophone:))]
+        fn test_microphone(&self, _sender: Option<&AnyObject>) {
+            self.show_mic_test("Listening… say something.", NSColor::secondaryLabelColor());
+            let device = self.controls().input_device();
+            std::thread::spawn(move || {
+                let heard = audio::Recorder::start(device.as_deref()).map(|rec| {
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    let samples = rec.stop();
+                    samples.iter().fold(0.0f32, |peak, s| peak.max(s.abs()))
+                });
+                DispatchQueue::main().exec_async(move || {
+                    with_actions(|a| match heard {
+                        Ok(peak) if peak > 0.02 => {
+                            a.show_mic_test("✓ sayit can hear you.", NSColor::systemGreenColor())
+                        }
+                        Ok(_) => a.show_mic_test(
+                            "✗ Only silence. Check the permission and the microphone choice.",
+                            NSColor::systemRedColor(),
+                        ),
+                        Err(e) => a.show_mic_test(&format!("✗ {e:#}"), NSColor::systemRedColor()),
+                    })
+                });
+            });
+        }
+
+        #[unsafe(method(showSetup:))]
+        fn show_setup_clicked(&self, _sender: Option<&AnyObject>) {
+            self.show_setup();
+        }
+
+        #[unsafe(method(showPermissions:))]
+        fn show_permissions_clicked(&self, _sender: Option<&AnyObject>) {
+            self.show_settings_tab(SettingsTab::Permissions);
+        }
+
+        #[unsafe(method(setupMicrophone:))]
+        fn setup_microphone(&self, menu: &NSPopUpButton) {
+            let choice = (menu.indexOfSelectedItem() > 0)
+                .then(|| menu.titleOfSelectedItem().map(|t| t.to_string()))
+                .flatten();
+            *self.controls().input_device.lock().unwrap_or_else(|e| e.into_inner()) =
+                choice.clone();
+            save_config(|cfg| cfg.input_device = choice);
+        }
+
+        #[unsafe(method(setupHotkey:))]
+        fn setup_hotkey(&self, menu: &NSPopUpButton) {
+            // Past the offered keys is a custom one from config.toml: keep it.
+            if let Some(&key) = HOTKEYS.get(menu.indexOfSelectedItem() as usize) {
+                save_config(|cfg| cfg.hotkey = key.to_string());
+            }
+            self.show_hotkey_in_setup();
+        }
+
+        #[unsafe(method(setupMode:))]
+        fn setup_mode(&self, control: &NSSegmentedControl) {
+            let mode = if control.selectedSegment() == 1 {
+                Mode::Toggle
+            } else {
+                Mode::Hold
+            };
+            save_config(|cfg| cfg.mode = mode);
+            self.show_hotkey_in_setup();
+        }
+
         #[unsafe(method(setupNext:))]
         fn setup_next(&self, _sender: Option<&AnyObject>) {
             let Some(setup) = self.ivars().setup.get() else {
@@ -188,11 +272,11 @@ define_class!(
 );
 
 impl Actions {
-    pub fn new(mtm: MainThreadMarker, controls: Arc<Controls>, hotkey: String) -> Retained<Self> {
+    pub fn new(mtm: MainThreadMarker, controls: Arc<Controls>) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(Ivars {
             controls,
-            hotkey,
             settings: OnceCell::new(),
+            watching: Cell::new(false),
             setup: OnceCell::new(),
             model_rows: RefCell::new(Vec::new()),
             download: RefCell::new(None),
@@ -221,24 +305,84 @@ impl Actions {
     }
 
     pub fn show_settings(&self) {
-        let window = self.ivars().settings.get_or_init(|| {
-            let (window, rows) = settings::build(self.mtm(), self);
+        let settings = self.ivars().settings.get_or_init(|| {
+            let (settings, rows) = settings::build(self.mtm(), self);
             self.ivars().model_rows.borrow_mut().extend(rows);
-            window
+            settings
         });
         self.refresh_models();
-        settings::show(self.mtm(), window);
+        self.refresh_permissions();
+        setup::bring_to_front(self.mtm(), &settings.window);
     }
 
+    pub fn show_settings_tab(&self, tab: SettingsTab) {
+        self.show_settings();
+        if let Some(settings) = self.ivars().settings.get() {
+            settings.select_tab(tab);
+        }
+    }
+
+    /// Opens the setup assistant, or brings it back if it's already open.
     pub fn show_setup(&self) {
+        let mut fresh = false;
         let setup = self.ivars().setup.get_or_init(|| {
-            let (setup, rows) = setup::build(self.mtm(), self, &self.ivars().hotkey);
+            fresh = true;
+            let cfg = Config::load().unwrap_or_default();
+            let (setup, rows) = setup::build(self.mtm(), self, &cfg);
             self.ivars().model_rows.borrow_mut().extend(rows);
             setup
         });
-        setup.go_to(0, self.controls());
+        if fresh {
+            setup.go_to(0, self.controls());
+        }
         self.refresh_models();
-        setup::show(self.mtm(), setup);
+        setup::bring_to_front(self.mtm(), &setup.window);
+    }
+
+    /// Checks both permissions every 2 seconds for the life of the app, so the
+    /// checklists and the menu-bar warning follow changes made in System
+    /// Settings. Each check is a cheap local query.
+    pub fn watch_permissions(&self) {
+        if self.ivars().watching.replace(true) {
+            return;
+        }
+        std::thread::Builder::new()
+            .name("sayit-permissions".into())
+            .spawn(|| {
+                loop {
+                    DispatchQueue::main().exec_async(|| with_actions(|a| a.refresh_permissions()));
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                }
+            })
+            .ok();
+    }
+
+    /// Updates every checklist and the menu bar from what macOS reports now.
+    pub fn refresh_permissions(&self) {
+        if let Some(setup) = self.ivars().setup.get() {
+            setup.refresh(self.controls());
+        }
+        let permitted = match self.ivars().settings.get() {
+            Some(settings) => refresh_permissions(&settings.permission_rows),
+            None => {
+                permissions::accessibility() == permissions::Access::Allowed
+                    && permissions::microphone() == permissions::Access::Allowed
+            }
+        };
+        with_ui(|ui| ui.permitted.set(permitted));
+    }
+
+    fn show_mic_test(&self, text: &str, color: objc2::rc::Retained<NSColor>) {
+        if let Some(settings) = self.ivars().settings.get() {
+            settings.mic_test.setStringValue(&NSString::from_str(text));
+            settings.mic_test.setTextColor(Some(&color));
+        }
+    }
+
+    fn show_hotkey_in_setup(&self) {
+        if let (Some(setup), Ok(cfg)) = (self.ivars().setup.get(), Config::load()) {
+            setup.show_hotkey(&cfg.hotkey, cfg.mode);
+        }
     }
 
     fn download_progress(&self, fraction: f64) {

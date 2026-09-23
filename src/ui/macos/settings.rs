@@ -6,14 +6,15 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{MainThreadMarker, sel};
 use objc2_app_kit::{
-    NSApplication, NSBox, NSButton, NSColor, NSFont, NSImage, NSLayoutAttribute,
-    NSProgressIndicator, NSStackView, NSStackViewDistribution, NSStackViewGravity,
-    NSTabViewController, NSTabViewControllerTabStyle, NSTabViewItem, NSTextField,
-    NSUserInterfaceLayoutOrientation, NSView, NSViewController, NSWindow, NSWindowStyleMask,
+    NSBox, NSButton, NSColor, NSFont, NSImage, NSLayoutAttribute, NSProgressIndicator, NSStackView,
+    NSStackViewDistribution, NSStackViewGravity, NSTabViewController, NSTabViewControllerTabStyle,
+    NSTabViewItem, NSTextField, NSUserInterfaceLayoutOrientation, NSView, NSViewController,
+    NSWindow, NSWindowStyleMask,
 };
 use objc2_foundation::{NSEdgeInsets, NSSize, NSString};
 
 use super::actions::Actions;
+use super::setup::{PermissionRow, permission_card};
 use super::widgets::{
     button, card, fixed_height, fixed_width, label, note, progress_bar, semibold, separator,
     spacer, stack, switch,
@@ -37,7 +38,7 @@ impl Toggle {
         Toggle::RestoreClipboard,
     ];
 
-    fn title(self) -> &'static str {
+    pub fn title(self) -> &'static str {
         match self {
             Toggle::RemoveFillers => "Remove filler words",
             Toggle::NewlineAfterTake => "Start each dictation on a new line",
@@ -45,17 +46,11 @@ impl Toggle {
         }
     }
 
-    fn explanation(self) -> &'static str {
+    pub fn explanation(self) -> &'static str {
         match self {
-            Toggle::RemoveFillers => "Drops \"um\", \"uh\" and \"erm\" from what you dictate.",
-            Toggle::NewlineAfterTake => {
-                "Otherwise a space is added. Turn this off if you dictate into terminals, \
-                 where a new line can run a command."
-            }
-            Toggle::RestoreClipboard => {
-                "sayit pastes through the clipboard. On: what you had copied before \
-                 dictating is put back. Off: the dictated text stays on the clipboard."
-            }
+            Toggle::RemoveFillers => "Drops \"um\", \"uh\" and \"erm\".",
+            Toggle::NewlineAfterTake => "Off adds a space instead. Turn off for terminals.",
+            Toggle::RestoreClipboard => "Puts back what you had copied before dictating.",
         }
     }
 
@@ -154,16 +149,18 @@ pub fn refresh_models(rows: &[ModelRow], state: &ModelsState) {
 /// Builds the window: a toolbar of tabs, like the settings of other Mac apps.
 /// It's created once and hidden rather than released when closed, so
 /// reopening it is instant.
-pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (Retained<NSWindow>, Vec<ModelRow>) {
+pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<ModelRow>) {
     let target: &AnyObject = actions;
     let (models_pane, rows) = models_pane(mtm, target);
     let text_pane = text_pane(mtm, target, actions.controls());
+    let (permissions_pane, permission_rows, mic_test) = permissions_pane(mtm, target);
 
     let tabs = NSTabViewController::new(mtm);
     tabs.setTabStyle(NSTabViewControllerTabStyle::Toolbar);
     for (label, symbol, pane) in [
         ("Models", "cpu", &models_pane),
         ("Text", "textformat", &text_pane),
+        ("Permissions", "lock.shield", &permissions_pane),
     ] {
         let controller = NSViewController::new(mtm);
         controller.setView(pane);
@@ -190,7 +187,80 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (Retained<NSWindow>, V
     // also release it when it closes.
     unsafe { window.setReleasedWhenClosed(false) };
     window.center();
-    (window, rows)
+    let settings = SettingsWindow {
+        window,
+        tabs,
+        permission_rows,
+        mic_test,
+    };
+    (settings, rows)
+}
+
+/// The Settings window and the parts of it that change while it's open.
+pub struct SettingsWindow {
+    pub window: Retained<NSWindow>,
+    tabs: Retained<NSTabViewController>,
+    pub permission_rows: [PermissionRow; 2],
+    /// Result of the last microphone test.
+    pub mic_test: Retained<NSTextField>,
+}
+
+impl SettingsWindow {
+    pub fn select_tab(&self, tab: SettingsTab) {
+        self.tabs.setSelectedTabViewItemIndex(tab as isize);
+    }
+}
+
+/// Tabs in the order they're added in `build`.
+#[derive(Clone, Copy)]
+pub enum SettingsTab {
+    Models = 0,
+    Permissions = 2,
+}
+
+/// The fallback when setup was skipped or a permission was later revoked:
+/// the live checklist, a microphone test that proves sayit really hears you,
+/// and the steps to fix things by hand.
+fn permissions_pane(
+    mtm: MainThreadMarker,
+    target: &AnyObject,
+) -> (
+    Retained<NSStackView>,
+    [PermissionRow; 2],
+    Retained<NSTextField>,
+) {
+    let intro = note(
+        mtm,
+        "What macOS reports right now. A green tick means sayit really has the permission.",
+        PANE_WIDTH,
+    );
+    let (checklist, rows) = permission_card(mtm, target);
+
+    let mic_test = label(
+        mtm,
+        "Records one second, then shows whether sayit heard you.",
+    );
+    mic_test.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+    mic_test.setTextColor(Some(&NSColor::secondaryLabelColor()));
+    let test = button(mtm, "Test Microphone", target, sel!(testMicrophone:), 0);
+    let check = button(mtm, "Check Again", target, sel!(checkPermissions:), 0);
+    let horizontal = NSUserInterfaceLayoutOrientation::Horizontal;
+    let tools = stack(mtm, horizontal, 8.0, &[&test, &check, &mic_test]);
+
+    let guide = note(
+        mtm,
+        "If something stays red:\n\
+         1. Open System Settings › Privacy & Security › Accessibility and turn on sayit. \
+         If it isn't listed, click +, choose sayit in Applications, and turn it on.\n\
+         2. If sayit is on but still red (common after an update), select it, click −, \
+         then add it again.\n\
+         3. In Privacy & Security › Microphone, turn on sayit.\n\
+         Running sayit from a terminal? Allow the terminal app instead, then quit and \
+         reopen it.",
+        PANE_WIDTH,
+    );
+    let pane = pane(mtm, &[&intro, &checklist, &tools, &guide]);
+    (pane, rows, mic_test)
 }
 
 /// A tab's content: a column of views with standard window margins.
@@ -212,8 +282,7 @@ fn models_pane(
 ) -> (Retained<NSStackView>, Vec<ModelRow>) {
     let intro = note(
         mtm,
-        "Choose the speech model sayit uses. Models run entirely on this Mac; \
-         larger ones are more accurate but use more memory.",
+        "Models run entirely on this Mac. Larger ones are more accurate but use more memory.",
         PANE_WIDTH,
     );
     let (cards, rows): (Vec<_>, Vec<_>) = ModelId::ALL
@@ -223,8 +292,7 @@ fn models_pane(
         .unzip();
     let footer = note(
         mtm,
-        "Downloads come from Hugging Face through sayit's bundled script, and every file \
-         is checked against a pinned SHA-256 checksum. After that, sayit works offline.",
+        "Every download is checked against a pinned SHA-256 checksum.",
         PANE_WIDTH,
     );
     let mut refs: Vec<&NSView> = vec![&intro];
@@ -341,19 +409,6 @@ fn text_pane(
         fixed_width(&row, CARD_INNER);
         rows.addArrangedSubview(&row);
     }
-    let intro = note(
-        mtm,
-        "How sayit tidies up and types what you say. Changes apply to your next dictation.",
-        PANE_WIDTH,
-    );
+    let intro = note(mtm, "Changes apply to your next dictation.", PANE_WIDTH);
     pane(mtm, &[&intro, &card(mtm, &rows, PANE_WIDTH)])
-}
-
-/// Brings the window to the front. sayit has no Dock icon, so the app must
-/// be activated explicitly or the window would open behind others.
-pub fn show(mtm: MainThreadMarker, window: &NSWindow) {
-    window.makeKeyAndOrderFront(None);
-    // `activate` needs macOS 14; sayit supports 13.
-    #[allow(deprecated)]
-    NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
 }

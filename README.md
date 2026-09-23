@@ -42,9 +42,11 @@ cd sayit
 open target/release/sayit-*.dmg
 ```
 
-1. Drag **sayit** into **Applications** and open it. A microphone icon appears in the menu bar; sayit has no Dock icon. On first launch, Settings opens so you can **download a speech model** (Parakeet v2 is recommended).
-2. When macOS asks, allow **Accessibility** in *System Settings › Privacy & Security*. sayit needs it to detect the hotkey and to paste. sayit starts as soon as you allow it.
-3. Click into any text field, **hold Right Option**, and speak. Release the key and the text appears. macOS asks for **Microphone** access the first time.
+1. Drag **sayit** into **Applications** and open it. A microphone icon appears in the menu bar; sayit has no Dock icon.
+2. The **setup assistant** walks you through choosing and downloading a speech model, allowing **Accessibility** and **Microphone** access (with a live green/red checklist), picking your microphone and hotkey, and the text options.
+3. Click into any text field, **hold Right Option** (or your chosen key), and speak. Release, and the text appears.
+
+If you quit partway, setup starts again next time, and the menu bar offers **Continue Setup…**.
 
 The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it opens normally. If you copy it to another Mac, Gatekeeper blocks the first launch: right-click the app and choose **Open**.
 
@@ -55,7 +57,8 @@ The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it o
 | Dictate | Hold the hotkey (default **Right Option**), speak, release |
 | Pause | Menu bar › **Pause Dictation**. The hotkey is ignored and any take in progress is discarded. |
 | Choose a microphone | Menu bar › **Microphone** |
-| Change settings | Menu bar › **Settings…** (⌘,). Changes apply immediately. |
+| Change settings | Menu bar › **Settings…** (⌘,): Models, Text and Permissions tabs. Changes apply immediately. |
+| Check permissions | Settings › **Permissions**: a live checklist, a **Test Microphone** button, and step-by-step fixes. The menu bar shows **Fix Permissions…** if one goes missing. |
 | Quit | Menu bar › **Quit sayit** (⌘Q) |
 
 ### Command line
@@ -109,6 +112,7 @@ tccutil reset Microphone io.github.ipsamurai.sayit
 | Problem | Fix |
 |---|---|
 | The first words are cut off | Bluetooth headset microphones take about a second to switch on. Choose the built-in mic under **Microphone**. |
+| Something doesn't respond | Open Settings › **Permissions**. Both rows should be green, and **Test Microphone** should say it can hear you. The tab lists the manual fixes. |
 | The hotkey stopped working after a rebuild | macOS still shows sayit as allowed, but the permission belongs to the old build. Run `tccutil reset Accessibility io.github.ipsamurai.sayit`, relaunch, and allow it again. |
 | The menu says "No speech model yet" | Open **Settings** and download a model. Dictation starts as soon as it finishes. |
 | Nothing is pasted in some apps | sayit pastes with ⌘V. Password fields and apps that block synthetic keystrokes won't accept it. |

@@ -5,9 +5,11 @@ use objc2::runtime::{AnyObject, Sel};
 use objc2::{MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
     NSBox, NSBoxType, NSButton, NSColor, NSControlSize, NSControlStateValueOff,
-    NSControlStateValueOn, NSFont, NSFontWeightSemibold, NSLayoutAttribute,
-    NSLayoutConstraintOrientation, NSMenuItem, NSProgressIndicator, NSProgressIndicatorStyle,
-    NSStackView, NSSwitch, NSTextField, NSTitlePosition, NSUserInterfaceLayoutOrientation, NSView,
+    NSControlStateValueOn, NSFont, NSFontWeightMedium, NSFontWeightSemibold, NSImage,
+    NSImageSymbolConfiguration, NSImageView, NSLayoutAttribute, NSLayoutConstraintOrientation,
+    NSMenuItem, NSPopUpButton, NSProgressIndicator, NSProgressIndicatorStyle,
+    NSSegmentSwitchTracking, NSSegmentedControl, NSStackView, NSStackViewDistribution, NSSwitch,
+    NSTextAlignment, NSTextField, NSTitlePosition, NSUserInterfaceLayoutOrientation, NSView,
 };
 use objc2_foundation::{NSSize, NSString};
 
@@ -178,4 +180,166 @@ pub fn stack(
         stack.addArrangedSubview(view);
     }
     stack
+}
+
+/// Text centred in its column, e.g. a page title or subtitle.
+pub fn centered(label: &NSTextField) {
+    label.setAlignment(NSTextAlignment::Center);
+}
+
+/// An SF Symbol at `size` points, tinted `color`.
+pub fn symbol(
+    mtm: MainThreadMarker,
+    name: &str,
+    size: f64,
+    color: &NSColor,
+) -> Retained<NSImageView> {
+    let view = NSImageView::new(mtm);
+    set_symbol(&view, name, size, color);
+    fixed_width(&view, size + 8.0);
+    fixed_height(&view, size + 8.0);
+    view
+}
+
+/// Changes the symbol shown by an image view made with `symbol`.
+pub fn set_symbol(view: &NSImageView, name: &str, size: f64, color: &NSColor) {
+    let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+        &NSString::from_str(name),
+        None,
+    );
+    view.setImage(image.as_deref());
+    // SAFETY: reading an immutable AppKit constant that is set at load time.
+    let weight = unsafe { NSFontWeightMedium };
+    let config = NSImageSymbolConfiguration::configurationWithPointSize_weight(size, weight);
+    view.setSymbolConfiguration(Some(&config));
+    view.setContentTintColor(Some(color));
+}
+
+/// A symbol on a softly tinted rounded square, like the icons in System
+/// Settings.
+pub fn icon_badge(
+    mtm: MainThreadMarker,
+    name: &str,
+    size: f64,
+    color: &NSColor,
+) -> Retained<NSBox> {
+    let badge = NSBox::new(mtm);
+    badge.setBoxType(NSBoxType::Custom);
+    badge.setTitlePosition(NSTitlePosition::NoTitle);
+    badge.setBorderWidth(0.0);
+    badge.setCornerRadius(size * 0.28);
+    badge.setFillColor(&color.colorWithAlphaComponent(0.16));
+    badge.setContentViewMargins(NSSize::new(0.0, 0.0));
+    let icon = symbol(mtm, name, size * 0.5, color);
+    let holder = stack(
+        mtm,
+        NSUserInterfaceLayoutOrientation::Vertical,
+        0.0,
+        &[&icon],
+    );
+    holder.setAlignment(NSLayoutAttribute::CenterX);
+    badge.setContentView(Some(&holder));
+    fixed_width(&badge, size);
+    fixed_height(&badge, size);
+    badge
+}
+
+/// A pop-up menu of `titles`; changes go to `target`'s `action`.
+pub fn popup(
+    mtm: MainThreadMarker,
+    titles: &[&str],
+    selected: usize,
+    target: &AnyObject,
+    action: Sel,
+) -> Retained<NSPopUpButton> {
+    let menu = NSPopUpButton::initWithFrame_pullsDown(
+        NSPopUpButton::alloc(mtm),
+        objc2_foundation::NSRect::ZERO,
+        false,
+    );
+    for title in titles {
+        menu.addItemWithTitle(&NSString::from_str(title));
+    }
+    menu.selectItemAtIndex(selected as isize);
+    // SAFETY: `action` is implemented by `target`, which outlives the window.
+    unsafe {
+        menu.setTarget(Some(target));
+        menu.setAction(Some(action));
+    }
+    menu
+}
+
+/// Side-by-side choices (one selectable); changes go to `target`'s `action`.
+pub fn segmented(
+    mtm: MainThreadMarker,
+    labels: &[&str],
+    selected: usize,
+    target: &AnyObject,
+    action: Sel,
+) -> Retained<NSSegmentedControl> {
+    let labels: Vec<_> = labels.iter().map(|l| NSString::from_str(l)).collect();
+    let labels = objc2_foundation::NSArray::from_retained_slice(&labels);
+    // SAFETY: `action` is implemented by `target`, which outlives the window.
+    let control = unsafe {
+        NSSegmentedControl::segmentedControlWithLabels_trackingMode_target_action(
+            &labels,
+            NSSegmentSwitchTracking::SelectOne,
+            Some(target),
+            Some(action),
+            mtm,
+        )
+    };
+    control.setSelectedSegment(selected as isize);
+    control
+}
+
+/// A row in a card: optional leading icon, a title with one short line under
+/// it, then an optional control at the far right.
+pub fn card_row(
+    mtm: MainThreadMarker,
+    leading: Option<&NSView>,
+    title: &NSTextField,
+    detail: &NSTextField,
+    trailing: Option<&NSView>,
+    width: f64,
+) -> Retained<NSStackView> {
+    let texts = stack(
+        mtm,
+        NSUserInterfaceLayoutOrientation::Vertical,
+        2.0,
+        &[title, detail],
+    );
+    let mut views: Vec<&NSView> = Vec::new();
+    if let Some(leading) = leading {
+        views.push(leading);
+    }
+    let gap = spacer(mtm);
+    views.extend([&*texts as &NSView, &gap]);
+    if let Some(trailing) = trailing {
+        views.push(trailing);
+    }
+    let row = stack(
+        mtm,
+        NSUserInterfaceLayoutOrientation::Horizontal,
+        12.0,
+        &views,
+    );
+    row.setDistribution(NSStackViewDistribution::Fill);
+    fixed_width(&row, width);
+    row
+}
+
+/// Stacks rows in a card with thin separators between them.
+pub fn rows_card(mtm: MainThreadMarker, rows: &[&NSView], width: f64) -> Retained<NSBox> {
+    let inner = width - 28.0;
+    let column = NSStackView::new(mtm);
+    column.setOrientation(NSUserInterfaceLayoutOrientation::Vertical);
+    column.setSpacing(10.0);
+    for (i, row) in rows.iter().enumerate() {
+        if i > 0 {
+            column.addArrangedSubview(&separator(mtm, inner));
+        }
+        column.addArrangedSubview(row);
+    }
+    card(mtm, &column, width)
 }
