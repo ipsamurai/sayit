@@ -12,7 +12,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use handy_keys::{Hotkey, HotkeyManager, HotkeyState};
+use handy_keys::{Hotkey, HotkeyId, HotkeyManager, HotkeyState};
 
 use crate::audio::{self, Recorder};
 use crate::config::{Config, Mode};
@@ -85,6 +85,10 @@ pub struct Controls {
     pub remove_fillers: AtomicBool,
     pub newline_after_take: AtomicBool,
     pub restore_clipboard: AtomicBool,
+    /// Hotkey (config name, e.g. "OptRight") and mode. The listener picks up
+    /// a change when `hotkey_changed` is set.
+    hotkey: Mutex<(String, Mode)>,
+    hotkey_changed: AtomicBool,
 }
 
 impl Controls {
@@ -96,7 +100,23 @@ impl Controls {
             remove_fillers: AtomicBool::new(cfg.remove_fillers),
             newline_after_take: AtomicBool::new(cfg.newline_after_take),
             restore_clipboard: AtomicBool::new(cfg.restore_clipboard),
+            hotkey: Mutex::new((cfg.hotkey.clone(), cfg.mode)),
+            hotkey_changed: AtomicBool::new(false),
         })
+    }
+
+    pub fn hotkey(&self) -> (String, Mode) {
+        self.hotkey
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Takes effect within ~10 ms, without a restart. A take in progress is
+    /// discarded.
+    pub fn set_hotkey(&self, hotkey: &str, mode: Mode) {
+        *self.hotkey.lock().unwrap_or_else(|e| e.into_inner()) = (hotkey.to_string(), mode);
+        self.hotkey_changed.store(true, Ordering::Relaxed);
     }
 
     pub fn model(&self) -> ModelId {
@@ -165,12 +185,9 @@ pub fn start(
     controls: Arc<Controls>,
     on_status: impl Fn(Status) + Send + Sync + 'static,
 ) -> Result<Dictation> {
-    let hotkey: Hotkey = cfg
-        .hotkey
-        .parse()
-        .map_err(|e| anyhow::anyhow!("invalid hotkey {:?}: {e}", cfg.hotkey))?;
     let manager = HotkeyManager::new().context("starting hotkey listener")?;
-    manager.register(hotkey)?;
+    let (hotkey, _) = controls.hotkey();
+    let hotkey_id = manager.register(parse_hotkey(&hotkey)?)?;
 
     let reporter = Arc::new(Reporter {
         state: Mutex::default(),
@@ -195,13 +212,29 @@ pub fn start(
 
     let controller = std::thread::Builder::new()
         .name("sayit-controller".into())
-        .spawn(move || controller(cfg, manager, job_tx, worker, reporter, controls))?;
+        .spawn(move || {
+            let hotkey = (manager, hotkey_id, hotkey);
+            controller(cfg, hotkey, job_tx, worker, reporter, controls)
+        })?;
     Ok(Dictation { controller })
+}
+
+fn parse_hotkey(name: &str) -> Result<Hotkey> {
+    name.parse()
+        .map_err(|e| anyhow::anyhow!("invalid hotkey {name:?}: {e}"))
+}
+
+/// Registers the new hotkey, then drops the old one; on failure the old one
+/// stays active.
+fn switch_hotkey(manager: &HotkeyManager, old: HotkeyId, name: &str) -> Result<HotkeyId> {
+    let id = manager.register(parse_hotkey(name)?)?;
+    manager.unregister(old)?;
+    Ok(id)
 }
 
 fn controller(
     cfg: Config,
-    manager: HotkeyManager,
+    (manager, mut hotkey_id, mut hotkey): (HotkeyManager, HotkeyId, String),
     job_tx: mpsc::Sender<Job>,
     worker: JoinHandle<()>,
     reporter: Arc<Reporter>,
@@ -210,6 +243,7 @@ fn controller(
     // Bounded so a typo in the config can't let one take grow without limit.
     let max_len = Duration::from_secs(cfg.max_recording_secs.clamp(1, MAX_RECORDING_SECS));
     let mut recording: Option<(Recorder, Instant)> = None;
+    let mut mode = controls.hotkey().1;
 
     // Stops the mic and either queues the audio for transcription or drops it.
     let finish = |rec: Recorder, keep: bool| -> Result<()> {
@@ -235,6 +269,23 @@ fn controller(
             anyhow::bail!("worker thread exited");
         }
 
+        if controls.hotkey_changed.swap(false, Ordering::Relaxed) {
+            // A half-finished take could otherwise wait for a release that
+            // never comes.
+            if let Some((rec, _)) = recording.take() {
+                finish(rec, false)?;
+            }
+            let (name, new_mode) = controls.hotkey();
+            mode = new_mode;
+            if name != hotkey {
+                match switch_hotkey(&manager, hotkey_id, &name) {
+                    Ok(id) => (hotkey_id, hotkey) = (id, name),
+                    Err(e) => eprintln!("could not change the hotkey: {e:#}"),
+                }
+            }
+            continue;
+        }
+
         if controls.paused.load(Ordering::Relaxed) {
             if let Some((rec, _)) = recording.take() {
                 finish(rec, false)?;
@@ -248,7 +299,7 @@ fn controller(
         }
         let Some(event) = event else { continue };
 
-        let start = match (cfg.mode, event.state, recording.is_some()) {
+        let start = match (mode, event.state, recording.is_some()) {
             (Mode::Hold, HotkeyState::Pressed, false) => true,
             (Mode::Hold, HotkeyState::Released, true) => false,
             (Mode::Toggle, HotkeyState::Pressed, rec) => !rec,
@@ -265,7 +316,7 @@ fn controller(
                 Err(e) => eprintln!("could not open microphone: {e:#}"),
             }
         } else if let Some((rec, started)) = recording.take() {
-            let accidental = cfg.mode == Mode::Hold && started.elapsed() < MIN_HOLD;
+            let accidental = mode == Mode::Hold && started.elapsed() < MIN_HOLD;
             finish(rec, !accidental)?;
         }
     }

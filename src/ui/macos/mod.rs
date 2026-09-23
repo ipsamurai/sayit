@@ -29,7 +29,7 @@ use settings::SettingsTab;
 use widgets::{check_state, menu_item};
 
 use crate::audio;
-use crate::config::Config;
+use crate::config::{Config, Mode};
 use crate::daemon::{self, Controls, Status};
 use crate::stt::ModelId;
 
@@ -57,7 +57,9 @@ struct Ui {
     /// Shown when macOS reports a permission missing.
     fix_permissions: Retained<NSMenuItem>,
     permitted: Cell<bool>,
-    hotkey: String,
+    /// e.g. "Right Option", and whether it's held or pressed.
+    hotkey: RefCell<String>,
+    mode: Cell<Mode>,
     state: Cell<State>,
     paused: Cell<bool>,
     error: RefCell<String>,
@@ -78,7 +80,6 @@ fn finish_setup(actions: &Actions) {
     // Setup may have changed the hotkey.
     let cfg = Config::load().unwrap_or_default();
     actions.apply_on_close(cfg.on_close);
-    let hotkey = cfg.hotkey;
     let (item, status_line, fix_permissions) = status_item(actions.mtm(), actions);
     UI.with(|ui| {
         let ui = ui.get_or_init(|| Ui {
@@ -86,7 +87,8 @@ fn finish_setup(actions: &Actions) {
             status_line,
             fix_permissions,
             permitted: Cell::new(true),
-            hotkey: hotkey_name(&hotkey),
+            hotkey: RefCell::new(hotkey_name(&cfg.hotkey)),
+            mode: Cell::new(cfg.mode),
             state: Cell::new(State::Loading),
             paused: Cell::new(false),
             error: RefCell::new(String::new()),
@@ -308,7 +310,14 @@ fn render(ui: &Ui) {
         ),
         (State::Ready(_), true) => ("mic.slash", "Paused".into()),
         (State::Ready(Status::Idle), false) => {
-            ("mic", format!("Ready: hold {} to dictate", ui.hotkey))
+            let verb = match ui.mode.get() {
+                Mode::Hold => "hold",
+                Mode::Toggle => "press",
+            };
+            (
+                "mic",
+                format!("Ready: {verb} {} to dictate", ui.hotkey.borrow()),
+            )
         }
         (State::Ready(Status::Recording), false) => ("mic.fill", "Listening…".into()),
         (State::Ready(Status::Transcribing), false) => ("waveform", "Transcribing…".into()),
@@ -325,6 +334,13 @@ fn render(ui: &Ui) {
         }
         button.setImage(image.as_deref());
         button.setToolTip(Some(&NSString::from_str(&format!("sayit: {text}"))));
+    }
+}
+
+impl Ui {
+    fn set_hotkey(&self, hotkey: &str, mode: Mode) {
+        *self.hotkey.borrow_mut() = hotkey_name(hotkey);
+        self.mode.set(mode);
     }
 }
 

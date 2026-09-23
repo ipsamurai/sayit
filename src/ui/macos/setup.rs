@@ -11,9 +11,9 @@ use objc2::runtime::AnyObject;
 use objc2::{AllocAnyThread, MainThreadMarker, MainThreadOnly, sel};
 use objc2_app_kit::{
     NSApplication, NSBackingStoreType, NSBox, NSButton, NSColor, NSControlSize, NSFont, NSImage,
-    NSImageView, NSLayoutAttribute, NSPopUpButton, NSStackView, NSStackViewDistribution,
-    NSStackViewGravity, NSTabView, NSTabViewItem, NSTabViewType, NSTextField,
-    NSUserInterfaceLayoutOrientation, NSView, NSWindow, NSWindowStyleMask,
+    NSImageView, NSLayoutAttribute, NSPopUpButton, NSSegmentedControl, NSStackView,
+    NSStackViewDistribution, NSStackViewGravity, NSTabView, NSTabViewItem, NSTabViewType,
+    NSTextField, NSUserInterfaceLayoutOrientation, NSView, NSWindow, NSWindowStyleMask,
 };
 use objc2_foundation::{NSEdgeInsets, NSPoint, NSRect, NSSize, NSString};
 
@@ -143,6 +143,7 @@ pub struct Setup {
     next: Retained<NSButton>,
     permission_rows: [PermissionRow; 2],
     mic_menu: Retained<NSPopUpButton>,
+    pub hotkey: HotkeyPicker,
     /// "Hold Right Option and speak" on the last page; follows the choice.
     how_to_line: Retained<NSTextField>,
 }
@@ -183,10 +184,11 @@ impl Setup {
         self.current.get() == PAGES.len() - 1
     }
 
-    /// Updates the how-to line after the hotkey or mode changes.
-    pub fn show_hotkey(&self, hotkey: &str, mode: Mode) {
+    /// Updates the picker and the how-to line after the hotkey or mode changes.
+    pub fn show_hotkey(&self, cfg: &Config) {
+        self.hotkey.show(cfg);
         self.how_to_line
-            .setStringValue(&NSString::from_str(&how_to(hotkey, mode)));
+            .setStringValue(&NSString::from_str(&how_to(&cfg.hotkey, cfg.mode)));
     }
 
     fn fill_mic_menu(&self, controls: &Controls) {
@@ -221,12 +223,13 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions, cfg: &Config) -> (Setup, 
     let (permissions_page, permission_rows) = permissions_page(mtm, target);
     let (mic_page, mic_menu) = microphone_page(mtm, target);
     let (done_page, how_to_line) = done_page(mtm, cfg);
+    let (hotkey_page, hotkey) = hotkey_page(mtm, target, cfg);
     let page_views = [
         welcome_page(mtm),
         model_page,
         permissions_page,
         mic_page,
-        hotkey_page(mtm, target, cfg),
+        hotkey_page,
         text_page(mtm, target, actions.controls()),
         done_page,
     ];
@@ -305,6 +308,7 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions, cfg: &Config) -> (Setup, 
         next,
         permission_rows,
         mic_menu,
+        hotkey,
         how_to_line,
     };
     (setup, rows)
@@ -512,7 +516,31 @@ fn microphone_page(
     (page, menu)
 }
 
-fn hotkey_page(mtm: MainThreadMarker, target: &AnyObject, cfg: &Config) -> Retained<NSStackView> {
+/// The hotkey and hold/toggle choice, shared by setup and Settings › General.
+pub struct HotkeyPicker {
+    key: Retained<NSPopUpButton>,
+    mode: Retained<NSSegmentedControl>,
+}
+
+impl HotkeyPicker {
+    /// Selects what config.toml says, e.g. after the other picker changed it.
+    pub fn show(&self, cfg: &Config) {
+        let custom = self.key.numberOfItems() - 1;
+        let index = HOTKEYS
+            .iter()
+            .position(|k| *k == cfg.hotkey)
+            .map_or(custom, |i| i as isize);
+        self.key.selectItemAtIndex(index);
+        self.mode
+            .setSelectedSegment((cfg.mode == Mode::Toggle) as isize);
+    }
+}
+
+pub fn hotkey_card(
+    mtm: MainThreadMarker,
+    target: &AnyObject,
+    cfg: &Config,
+) -> (Retained<NSBox>, HotkeyPicker) {
     let mut titles: Vec<String> = HOTKEYS.iter().map(|k| hotkey_name(k)).collect();
     let selected = match HOTKEYS.iter().position(|k| *k == cfg.hotkey) {
         Some(i) => i,
@@ -523,13 +551,13 @@ fn hotkey_page(mtm: MainThreadMarker, target: &AnyObject, cfg: &Config) -> Retai
         }
     };
     let title_refs: Vec<&str> = titles.iter().map(String::as_str).collect();
-    let key_menu = popup(mtm, &title_refs, selected, target, sel!(setupHotkey:));
+    let key = popup(mtm, &title_refs, selected, target, sel!(chooseHotkey:));
     let key_row = card_row(
         mtm,
         None,
         &semibold(mtm, "Hotkey"),
         &note(mtm, "A key you don't use for typing.", CARD_INNER - 220.0),
-        Some(&key_menu),
+        Some(&key),
         CARD_INNER,
     );
     let mode = segmented(
@@ -537,7 +565,7 @@ fn hotkey_page(mtm: MainThreadMarker, target: &AnyObject, cfg: &Config) -> Retai
         &["Hold", "Toggle"],
         (cfg.mode == Mode::Toggle) as usize,
         target,
-        sel!(setupMode:),
+        sel!(chooseMode:),
     );
     let mode_row = card_row(
         mtm,
@@ -552,13 +580,23 @@ fn hotkey_page(mtm: MainThreadMarker, target: &AnyObject, cfg: &Config) -> Retai
         CARD_INNER,
     );
     let card = rows_card(mtm, &[&key_row, &mode_row], PANE_WIDTH);
-    page(
+    (card, HotkeyPicker { key, mode })
+}
+
+fn hotkey_page(
+    mtm: MainThreadMarker,
+    target: &AnyObject,
+    cfg: &Config,
+) -> (Retained<NSStackView>, HotkeyPicker) {
+    let (card, picker) = hotkey_card(mtm, target, cfg);
+    let page = page(
         mtm,
         &badge(mtm, "keyboard.fill", &NSColor::systemPurpleColor()),
         "Pick your hotkey",
         "Right Option works well: it's rarely used and easy to reach.",
         &[&card],
-    )
+    );
+    (page, picker)
 }
 
 fn text_page(

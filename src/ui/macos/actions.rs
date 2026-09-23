@@ -246,24 +246,25 @@ define_class!(
             save_config(|cfg| cfg.input_device = choice);
         }
 
-        #[unsafe(method(setupHotkey:))]
-        fn setup_hotkey(&self, menu: &NSPopUpButton) {
+        /// From setup or Settings › General.
+        #[unsafe(method(chooseHotkey:))]
+        fn choose_hotkey(&self, menu: &NSPopUpButton) {
             // Past the offered keys is a custom one from config.toml: keep it.
             if let Some(&key) = HOTKEYS.get(menu.indexOfSelectedItem() as usize) {
                 save_config(|cfg| cfg.hotkey = key.to_string());
             }
-            self.show_hotkey_in_setup();
+            self.hotkey_changed();
         }
 
-        #[unsafe(method(setupMode:))]
-        fn setup_mode(&self, control: &NSSegmentedControl) {
+        #[unsafe(method(chooseMode:))]
+        fn choose_mode(&self, control: &NSSegmentedControl) {
             let mode = if control.selectedSegment() == 1 {
                 Mode::Toggle
             } else {
                 Mode::Hold
             };
             save_config(|cfg| cfg.mode = mode);
-            self.show_hotkey_in_setup();
+            self.hotkey_changed();
         }
 
         #[unsafe(method(setupNext:))]
@@ -382,10 +383,6 @@ impl Actions {
         setup::bring_to_front(self.mtm(), &settings.window);
     }
 
-    pub fn on_close(&self) -> OnClose {
-        self.ivars().on_close.get()
-    }
-
     /// Remembers what closing Settings does, and shows or hides the Dock icon
     /// to match. The menu-bar icon stays either way.
     pub fn apply_on_close(&self, on_close: OnClose) {
@@ -483,10 +480,20 @@ impl Actions {
         }
     }
 
-    fn show_hotkey_in_setup(&self) {
-        if let (Some(setup), Ok(cfg)) = (self.ivars().setup.get(), Config::load()) {
-            setup.show_hotkey(&cfg.hotkey, cfg.mode);
+    /// Applies a new hotkey or mode from config.toml: to the running listener,
+    /// both pickers, the setup how-to and the menu-bar status line.
+    fn hotkey_changed(&self) {
+        let Ok(cfg) = Config::load() else {
+            return;
+        };
+        self.controls().set_hotkey(&cfg.hotkey, cfg.mode);
+        if let Some(setup) = self.ivars().setup.get() {
+            setup.show_hotkey(&cfg);
         }
+        if let Some(settings) = self.ivars().settings.get() {
+            settings.hotkey.show(&cfg);
+        }
+        with_ui(|ui| ui.set_hotkey(&cfg.hotkey, cfg.mode));
     }
 
     /// Stops a model download when sayit quits, so it doesn't carry on in the

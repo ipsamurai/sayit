@@ -55,6 +55,7 @@ The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it o
 | To… | Do this |
 |---|---|
 | Dictate | Hold the hotkey (default **Right Option**), speak, release |
+| Change the hotkey | Settings › **General**: pick the key and Hold or Toggle. It works straight away, no restart. |
 | Pause | Menu bar › **Pause Dictation**. The hotkey is ignored and any take in progress is discarded. |
 | Choose a microphone | Menu bar › **Microphone** |
 | Change settings | Menu bar › **Settings…** (⌘,): General, Models, Text and Permissions tabs. Changes apply immediately. |

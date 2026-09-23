@@ -15,7 +15,7 @@ use objc2_foundation::{NSEdgeInsets, NSSize, NSString};
 
 use super::actions::Actions;
 use super::login::Login;
-use super::setup::{PermissionRow, permission_card};
+use super::setup::{HotkeyPicker, PermissionRow, hotkey_card, permission_card};
 use super::widgets::{
     button, card, card_row, check_state, fixed_height, fixed_width, label, note, popup,
     progress_bar, rows_card, semibold, separator, spacer, stack, switch,
@@ -159,7 +159,8 @@ pub fn refresh_models(rows: &[ModelRow], state: &ModelsState) {
 /// reopening it is instant.
 pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<ModelRow>) {
     let target: &AnyObject = actions;
-    let (general_pane, login_switch, login_note) = general_pane(mtm, target, actions.on_close());
+    let cfg = Config::load().unwrap_or_default();
+    let (general_pane, hotkey, login_switch, login_note) = general_pane(mtm, target, &cfg);
     let (models_pane, rows) = models_pane(mtm, target);
     let text_pane = text_pane(mtm, target, actions.controls());
     let (permissions_pane, permission_rows, mic_test) = permissions_pane(mtm, target);
@@ -200,6 +201,7 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<M
     let settings = SettingsWindow {
         window,
         tabs,
+        hotkey,
         login_switch,
         login_note,
         permission_rows,
@@ -212,6 +214,7 @@ pub fn build(mtm: MainThreadMarker, actions: &Actions) -> (SettingsWindow, Vec<M
 pub struct SettingsWindow {
     pub window: Retained<NSWindow>,
     tabs: Retained<NSTabViewController>,
+    pub hotkey: HotkeyPicker,
     login_switch: Retained<NSSwitch>,
     login_note: Retained<NSTextField>,
     pub permission_rows: [PermissionRow; 2],
@@ -248,16 +251,18 @@ pub enum SettingsTab {
     Permissions = 3,
 }
 
-/// Start at login, and what closing this window does.
+/// The hotkey, start at login, and what closing this window does.
 fn general_pane(
     mtm: MainThreadMarker,
     target: &AnyObject,
-    on_close: OnClose,
+    cfg: &Config,
 ) -> (
     Retained<NSStackView>,
+    HotkeyPicker,
     Retained<NSSwitch>,
     Retained<NSTextField>,
 ) {
+    let (hotkey_card, hotkey) = hotkey_card(mtm, target, cfg);
     let login_switch = switch(mtm, false, target, sel!(toggleLogin:), 0);
     let login_note = note(mtm, "", CARD_INNER - 70.0);
     let login = card_row(
@@ -269,7 +274,7 @@ fn general_pane(
         CARD_INNER,
     );
     let titles = ON_CLOSE.map(|(_, title)| title);
-    let selected = ON_CLOSE.iter().position(|(c, _)| *c == on_close);
+    let selected = ON_CLOSE.iter().position(|(c, _)| *c == cfg.on_close);
     let choice = popup(
         mtm,
         &titles,
@@ -290,7 +295,8 @@ fn general_pane(
         CARD_INNER,
     );
     let card = rows_card(mtm, &[&login, &closing], PANE_WIDTH);
-    (pane(mtm, &[&card]), login_switch, login_note)
+    let pane = pane(mtm, &[&hotkey_card, &card]);
+    (pane, hotkey, login_switch, login_note)
 }
 
 /// The fallback when setup was skipped or a permission was later revoked:
