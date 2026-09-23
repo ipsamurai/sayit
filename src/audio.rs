@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat};
 
@@ -41,7 +41,8 @@ fn input_device(name: Option<&str>) -> Result<cpal::Device> {
         }
         eprintln!("input device {name:?} not connected, using the system default");
     }
-    host.default_input_device().ok_or_else(|| anyhow!("no input device found"))
+    host.default_input_device()
+        .ok_or_else(|| anyhow!("no input device found"))
 }
 
 impl Recorder {
@@ -66,10 +67,18 @@ impl Recorder {
         };
 
         let stream = match config.sample_format() {
-            SampleFormat::F32 => build::<f32>(&device, config.into(), channels, buf.clone(), err_fn)?,
-            SampleFormat::I16 => build::<i16>(&device, config.into(), channels, buf.clone(), err_fn)?,
-            SampleFormat::I32 => build::<i32>(&device, config.into(), channels, buf.clone(), err_fn)?,
-            SampleFormat::U16 => build::<u16>(&device, config.into(), channels, buf.clone(), err_fn)?,
+            SampleFormat::F32 => {
+                build::<f32>(&device, config.into(), channels, buf.clone(), err_fn)?
+            }
+            SampleFormat::I16 => {
+                build::<i16>(&device, config.into(), channels, buf.clone(), err_fn)?
+            }
+            SampleFormat::I32 => {
+                build::<i32>(&device, config.into(), channels, buf.clone(), err_fn)?
+            }
+            SampleFormat::U16 => {
+                build::<u16>(&device, config.into(), channels, buf.clone(), err_fn)?
+            }
             f => return Err(anyhow!("unsupported sample format {f}")),
         };
         stream.play()?;
@@ -145,7 +154,11 @@ pub fn resample(input: &[f32], from: u32, to: u32) -> Vec<f32> {
             acc += input[k as usize] as f64 * c;
             wsum += c;
         }
-        out.push(if wsum.abs() > 1e-9 { (acc / wsum) as f32 } else { 0.0 });
+        out.push(if wsum.abs() > 1e-9 {
+            (acc / wsum) as f32
+        } else {
+            0.0
+        });
     }
     out
 }

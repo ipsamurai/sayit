@@ -43,7 +43,11 @@ mod platform {
 
         pub fn paste(&mut self, text: &str, restore_clipboard: bool) -> Result<()> {
             let pb = NSPasteboard::generalPasteboard();
-            let saved = if restore_clipboard { save(&pb) } else { Vec::new() };
+            let saved = if restore_clipboard {
+                save(&pb)
+            } else {
+                Vec::new()
+            };
 
             pb.clearContents();
             let item = NSPasteboardItem::new();
@@ -80,7 +84,9 @@ mod platform {
     }
 
     fn save(pb: &NSPasteboard) -> Vec<SavedItem> {
-        let Some(items) = pb.pasteboardItems() else { return Vec::new() };
+        let Some(items) = pb.pasteboardItems() else {
+            return Vec::new();
+        };
         items
             .iter()
             .map(|it| {
@@ -96,7 +102,10 @@ mod platform {
         if items.is_empty() {
             return;
         }
-        let objs: Vec<_> = items.into_iter().map(ProtocolObject::from_retained).collect();
+        let objs: Vec<_> = items
+            .into_iter()
+            .map(ProtocolObject::from_retained)
+            .collect();
         pb.writeObjects(&NSArray::from_retained_slice(&objs));
     }
 
@@ -133,7 +142,7 @@ mod platform {
     //! compositor including GNOME. Needs write access to /dev/uinput.
     use super::*;
     use anyhow::Context;
-    use evdev::{uinput::VirtualDevice, AttributeSet, EventType, InputEvent, KeyCode};
+    use evdev::{AttributeSet, EventType, InputEvent, KeyCode, uinput::VirtualDevice};
 
     pub struct Injector {
         kbd: VirtualDevice,
@@ -144,7 +153,6 @@ mod platform {
         pub fn new() -> Result<Self> {
             let mut keys = AttributeSet::<KeyCode>::new();
             keys.insert(KeyCode::KEY_LEFTCTRL);
-            keys.insert(KeyCode::KEY_LEFTSHIFT);
             keys.insert(KeyCode::KEY_V);
             // Created once at startup: compositors need a moment to pick up
             // a new input device, so creating it per-paste would drop keys.
@@ -158,13 +166,19 @@ mod platform {
         }
 
         pub fn paste(&mut self, text: &str, restore_clipboard: bool) -> Result<()> {
-            let saved = if restore_clipboard { self.clipboard.get_text().ok() } else { None };
+            let saved = if restore_clipboard {
+                self.clipboard.get_text().ok()
+            } else {
+                None
+            };
             self.clipboard.set_text(text)?;
             std::thread::sleep(Duration::from_millis(30));
 
             let key = |k: KeyCode, v| InputEvent::new(EventType::KEY.0, k.code(), v);
-            self.kbd.emit(&[key(KeyCode::KEY_LEFTCTRL, 1), key(KeyCode::KEY_V, 1)])?;
-            self.kbd.emit(&[key(KeyCode::KEY_V, 0), key(KeyCode::KEY_LEFTCTRL, 0)])?;
+            self.kbd
+                .emit(&[key(KeyCode::KEY_LEFTCTRL, 1), key(KeyCode::KEY_V, 1)])?;
+            self.kbd
+                .emit(&[key(KeyCode::KEY_V, 0), key(KeyCode::KEY_LEFTCTRL, 0)])?;
 
             if let Some(prev) = saved {
                 std::thread::sleep(RESTORE_DELAY);

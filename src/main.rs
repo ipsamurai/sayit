@@ -1,5 +1,11 @@
+//! sayit: private, local-only push-to-talk dictation.
+//!
+//! `sayit app` runs the menu-bar app (the default inside `sayit.app`),
+//! `sayit run` the same service without a UI; `listen` and `transcribe` are
+//! for testing and benchmarks.
+
 use std::io::BufRead;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::Result;
@@ -76,19 +82,18 @@ fn model_or_config(model: Option<stt::ModelId>) -> Result<stt::ModelId> {
     })
 }
 
+/// Loads the model and runs one warm-up pass, so the first real
+/// transcription is timed like the rest.
 fn load_engine(model: stt::ModelId) -> Result<stt::Engine> {
     let t = Instant::now();
-    let engine = stt::Engine::load(model)?;
+    let mut engine = stt::Engine::load(model)?;
     eprintln!("{} loaded in {:.2?}", model.key(), t.elapsed());
+    engine.transcribe(&vec![0.0; audio::TARGET_RATE as usize])?;
     Ok(engine)
 }
 
 fn listen(model: stt::ModelId) -> Result<()> {
     let mut engine = load_engine(model)?;
-    // Warm-up pass so the first real dictation isn't slower than the rest.
-    let t = Instant::now();
-    engine.transcribe(&vec![0.0; audio::TARGET_RATE as usize])?;
-    eprintln!("warm-up in {:.2?}", t.elapsed());
 
     let stdin = std::io::stdin();
     let mut line = String::new();
@@ -100,7 +105,10 @@ fn listen(model: stt::ModelId) -> Result<()> {
         }
         let t_open = Instant::now();
         let rec = audio::Recorder::start(None)?;
-        eprintln!("recording... (mic opened in {:.0?}) press Enter to stop", t_open.elapsed());
+        eprintln!(
+            "recording... (mic opened in {:.0?}) press Enter to stop",
+            t_open.elapsed()
+        );
         line.clear();
         stdin.lock().read_line(&mut line)?;
 
@@ -126,7 +134,7 @@ fn listen(model: stt::ModelId) -> Result<()> {
     }
 }
 
-fn transcribe_file(path: &PathBuf, model: stt::ModelId) -> Result<()> {
+fn transcribe_file(path: &Path, model: stt::ModelId) -> Result<()> {
     let mut reader = hound::WavReader::open(path)?;
     let spec = reader.spec();
     let raw: Vec<f32> = match spec.sample_format {
@@ -140,16 +148,21 @@ fn transcribe_file(path: &PathBuf, model: stt::ModelId) -> Result<()> {
         }
     };
     let ch = spec.channels as usize;
-    let mono: Vec<f32> = raw.chunks_exact(ch).map(|f| f.iter().sum::<f32>() / ch as f32).collect();
+    let mono: Vec<f32> = raw
+        .chunks_exact(ch)
+        .map(|f| f.iter().sum::<f32>() / ch as f32)
+        .collect();
     let samples = audio::resample(&mono, spec.sample_rate, audio::TARGET_RATE);
 
     let mut engine = load_engine(model)?;
-    engine.transcribe(&vec![0.0; audio::TARGET_RATE as usize])?;
     let t = Instant::now();
     let text = engine.transcribe(&samples)?;
     let el = t.elapsed();
     let secs = samples.len() as f32 / audio::TARGET_RATE as f32;
     println!("{text}");
-    eprintln!("audio {secs:.1}s | stt {el:.0?} | {:.0}x realtime", secs / el.as_secs_f32());
+    eprintln!(
+        "audio {secs:.1}s | stt {el:.0?} | {:.0}x realtime",
+        secs / el.as_secs_f32()
+    );
     Ok(())
 }

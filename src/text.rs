@@ -60,7 +60,10 @@ mod tests {
 
     #[test]
     fn removes_fillers_mid_sentence() {
-        assert_eq!(clean("I plan to make this uh voice app"), "I plan to make this voice app");
+        assert_eq!(
+            clean("I plan to make this uh voice app"),
+            "I plan to make this voice app"
+        );
         assert_eq!(clean("we should, um, ship it."), "we should, ship it.");
     }
 
@@ -85,7 +88,12 @@ mod tests {
     #[test]
     fn leaves_real_words_alone() {
         // Substrings and words people use on purpose stay.
-        for s in ["Umbrella and hummus.", "Hmm, I like it.", "Ah, I see.", "The UH-60 helicopter."] {
+        for s in [
+            "Umbrella and hummus.",
+            "Hmm, I like it.",
+            "Ah, I see.",
+            "The UH-60 helicopter.",
+        ] {
             assert_eq!(clean(s), s);
         }
     }

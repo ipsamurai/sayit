@@ -1,6 +1,6 @@
 //! Menu-bar app: a status icon showing what sayit is doing, with Pause,
-//! microphone and model pickers, and Quit. The dictation service runs on background threads (see daemon.rs);
-//! AppKit owns the main thread.
+//! microphone and model pickers, and Quit. AppKit owns the main thread; the
+//! dictation service runs on background threads (see daemon.rs).
 
 use anyhow::Result;
 
@@ -17,12 +17,12 @@ mod platform {
 
     use dispatch2::DispatchQueue;
     use objc2::rc::Retained;
-    use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
-    use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThreadOnly};
+    use objc2::runtime::{AnyObject, NSObject, ProtocolObject, Sel};
+    use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
     use objc2_app_kit::{
-        NSApplication, NSApplicationActivationPolicy, NSControlStateValueOff, NSControlStateValueOn,
-        NSImage, NSMenu, NSMenuDelegate, NSMenuItem, NSStatusBar, NSStatusItem,
-        NSVariableStatusItemLength,
+        NSApplication, NSApplicationActivationPolicy, NSControlStateValueOff,
+        NSControlStateValueOn, NSImage, NSMenu, NSMenuDelegate, NSMenuItem, NSStatusBar,
+        NSStatusItem, NSVariableStatusItemLength,
     };
     use objc2_foundation::{NSObjectProtocol, NSString};
 
@@ -80,13 +80,8 @@ mod platform {
                 let controls = &self.ivars().controls;
                 let paused = !controls.paused.load(Ordering::Relaxed);
                 controls.paused.store(paused, Ordering::Relaxed);
-                item.setState(if paused { NSControlStateValueOn } else { NSControlStateValueOff });
-                UI.with(|ui| {
-                    if let Some(ui) = ui.get() {
-                        ui.paused.set(paused);
-                        render(ui);
-                    }
-                });
+                item.setState(check_state(paused));
+                with_ui(|ui| ui.paused.set(paused));
             }
 
             #[unsafe(method(selectMic:))]
@@ -135,11 +130,17 @@ mod platform {
             (State::Loading, _) => ("hourglass", "Loading model…".to_string()),
             (State::NeedsAccessibility, _) => (
                 "exclamationmark.triangle",
-                "Waiting for Accessibility permission (System Settings › Privacy & Security)".into(),
+                "Waiting for Accessibility permission (System Settings › Privacy & Security)"
+                    .into(),
             ),
-            (State::Failed, _) => ("exclamationmark.triangle", format!("Stopped: {}", ui.error.borrow())),
+            (State::Failed, _) => (
+                "exclamationmark.triangle",
+                format!("Stopped: {}", ui.error.borrow()),
+            ),
             (State::Ready(_), true) => ("mic.slash", "Paused".into()),
-            (State::Ready(Status::Idle), false) => ("mic", format!("Ready: hold {} to dictate", ui.hotkey)),
+            (State::Ready(Status::Idle), false) => {
+                ("mic", format!("Ready: hold {} to dictate", ui.hotkey))
+            }
             (State::Ready(Status::Recording), false) => ("mic.fill", "Listening…".into()),
             (State::Ready(Status::Transcribing), false) => ("waveform", "Transcribing…".into()),
         };
@@ -158,81 +159,105 @@ mod platform {
         }
     }
 
+    /// Changes the UI and redraws it. Main thread only.
+    fn with_ui(change: impl FnOnce(&Ui)) {
+        UI.with(|ui| {
+            if let Some(ui) = ui.get() {
+                change(ui);
+                render(ui);
+            }
+        });
+    }
+
     /// Sets the state from any thread; the UI update runs on the main thread.
     fn set_state(state: State) {
-        DispatchQueue::main().exec_async(move || {
-            UI.with(|ui| {
-                if let Some(ui) = ui.get() {
-                    ui.state.set(state);
-                    render(ui);
-                }
-            })
-        });
+        DispatchQueue::main().exec_async(move || with_ui(|ui| ui.state.set(state)));
     }
 
     fn set_failed(message: String) {
         DispatchQueue::main().exec_async(move || {
-            UI.with(|ui| {
-                if let Some(ui) = ui.get() {
-                    *ui.error.borrow_mut() = message;
-                    ui.state.set(State::Failed);
-                    render(ui);
-                }
+            with_ui(|ui| {
+                *ui.error.borrow_mut() = message;
+                ui.state.set(State::Failed);
             })
         });
     }
 
-    fn fill_mic_menu(target: &MenuTarget, menu: &NSMenu) {
-        let mtm = target.mtm();
-        let current = target.ivars().controls.input_device();
-        let target: &AnyObject = target;
-        let names = audio::input_device_names();
-        menu.removeAllItems();
+    fn check_state(on: bool) -> isize {
+        if on {
+            NSControlStateValueOn
+        } else {
+            NSControlStateValueOff
+        }
+    }
 
-        let add = |title: &str, tag: isize, checked: bool, enabled: bool| {
-            let action = enabled.then(|| sel!(selectMic:));
-            let item = menu_item(mtm, title, action, "");
-            item.setTag(tag);
-            item.setState(if checked { NSControlStateValueOn } else { NSControlStateValueOff });
-            if enabled {
-                // SAFETY: the target outlives the menu (see `run`).
-                unsafe { item.setTarget(Some(target)) };
-            }
-            menu.addItem(&item);
-        };
-        add("System Default", DEFAULT_MIC_TAG, current.is_none(), true);
-        menu.addItem(&NSMenuItem::separatorItem(mtm));
+    /// Adds a checkable item to a picker submenu. Items without an action
+    /// are shown greyed out.
+    fn add_choice(
+        menu: &NSMenu,
+        target: &MenuTarget,
+        title: &str,
+        action: Option<Sel>,
+        tag: isize,
+        checked: bool,
+    ) {
+        let item = menu_item(target.mtm(), title, action, "");
+        item.setTag(tag);
+        item.setState(check_state(checked));
+        if action.is_some() {
+            // SAFETY: the target outlives the menu (see `run`).
+            unsafe { item.setTarget(Some(target as &AnyObject)) };
+        }
+        menu.addItem(&item);
+    }
+
+    fn fill_mic_menu(target: &MenuTarget, menu: &NSMenu) {
+        let current = target.ivars().controls.input_device();
+        let names = audio::input_device_names();
+        let select = Some(sel!(selectMic:));
+        menu.removeAllItems();
+        add_choice(
+            menu,
+            target,
+            "System Default",
+            select,
+            DEFAULT_MIC_TAG,
+            current.is_none(),
+        );
+        menu.addItem(&NSMenuItem::separatorItem(target.mtm()));
         for name in &names {
-            add(name, 0, current.as_deref() == Some(name.as_str()), true);
+            add_choice(
+                menu,
+                target,
+                name,
+                select,
+                0,
+                current.as_ref() == Some(name),
+            );
         }
         if let Some(cur) = current.filter(|c| !names.contains(c)) {
-            // Chosen device is unplugged: show it, but takes use the default.
-            add(&format!("{cur} (not connected)"), 0, true, false);
+            // The chosen device is unplugged: keep showing it, but takes use the default.
+            add_choice(
+                menu,
+                target,
+                &format!("{cur} (not connected)"),
+                None,
+                0,
+                true,
+            );
         }
     }
 
     fn fill_model_menu(target: &MenuTarget, menu: &NSMenu) {
-        let mtm = target.mtm();
         let current = target.ivars().controls.model();
-        let target: &AnyObject = target;
         menu.removeAllItems();
         for (i, model) in ModelId::ALL.into_iter().enumerate() {
-            let installed = model.is_installed();
-            let title = if installed {
-                model.label().to_string()
+            let (title, action) = if model.is_installed() {
+                (model.label().to_string(), Some(sel!(selectModel:)))
             } else {
-                format!("{} (not downloaded)", model.label())
+                (format!("{} (not downloaded)", model.label()), None)
             };
-            let item = menu_item(mtm, &title, installed.then(|| sel!(selectModel:)), "");
-            item.setTag(i as isize);
-            if model == current {
-                item.setState(NSControlStateValueOn);
-            }
-            if installed {
-                // SAFETY: the target outlives the menu (see `run`).
-                unsafe { item.setTarget(Some(target)) };
-            }
-            menu.addItem(&item);
+            add_choice(menu, target, &title, action, i as isize, model == current);
         }
     }
 
@@ -248,7 +273,12 @@ mod platform {
         }
     }
 
-    fn menu_item(mtm: MainThreadMarker, title: &str, action: Option<objc2::runtime::Sel>, key: &str) -> Retained<NSMenuItem> {
+    fn menu_item(
+        mtm: MainThreadMarker,
+        title: &str,
+        action: Option<Sel>,
+        key: &str,
+    ) -> Retained<NSMenuItem> {
         // SAFETY: `action` is either None or a selector implemented by the
         // item's target (MenuTarget) or by NSApplication (terminate:).
         unsafe {
@@ -262,7 +292,8 @@ mod platform {
     }
 
     pub fn run(cfg: Config, verbose: bool) -> Result<()> {
-        let mtm = MainThreadMarker::new().ok_or_else(|| anyhow::anyhow!("must run on the main thread"))?;
+        let mtm = MainThreadMarker::new()
+            .ok_or_else(|| anyhow::anyhow!("the menu-bar app must run on the main thread"))?;
         let app = NSApplication::sharedApplication(mtm);
         // Menu-bar only: no Dock icon, no app switcher entry.
         app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
@@ -280,7 +311,11 @@ mod platform {
         unsafe { pause.setTarget(Some(&target as &AnyObject)) };
         menu.addItem(&pause);
         // The Model menu only appears once there is a choice to make.
-        let submenus: &[&str] = if ModelId::ALL.len() > 1 { &[MIC_MENU, MODEL_MENU] } else { &[MIC_MENU] };
+        let submenus = if ModelId::ALL.len() > 1 {
+            &[MIC_MENU, MODEL_MENU][..]
+        } else {
+            &[MIC_MENU]
+        };
         for &title in submenus {
             let item = menu_item(mtm, title, None, "");
             let submenu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str(title));
@@ -302,7 +337,11 @@ mod platform {
                 item,
                 status_line,
                 hotkey: cfg.hotkey.clone(),
-                state: Cell::new(if trusted { State::Loading } else { State::NeedsAccessibility }),
+                state: Cell::new(if trusted {
+                    State::Loading
+                } else {
+                    State::NeedsAccessibility
+                }),
                 paused: Cell::new(false),
                 error: RefCell::new(String::new()),
             });
@@ -310,24 +349,26 @@ mod platform {
         });
 
         // Model loading takes ~1 s; keep the main thread responsive.
-        std::thread::Builder::new().name("sayit-start".into()).spawn(move || {
-            if !trusted {
-                while !daemon::accessibility_trusted(false) {
-                    std::thread::sleep(Duration::from_secs(1));
+        std::thread::Builder::new()
+            .name("sayit-start".into())
+            .spawn(move || {
+                if !trusted {
+                    while !daemon::accessibility_trusted(false) {
+                        std::thread::sleep(Duration::from_secs(1));
+                    }
+                    set_state(State::Loading);
                 }
-                set_state(State::Loading);
-            }
-            let result = daemon::start(cfg, verbose, controls, |s| set_state(State::Ready(s)))
-                .and_then(|d| {
-                    set_state(State::Ready(Status::Idle));
-                    d.wait()
-                });
-            if let Err(e) = result {
-                eprintln!("{e:#}");
-                // Outermost context only: it's the actionable part and has no paths.
-                set_failed(e.to_string());
-            }
-        })?;
+                let result = daemon::start(cfg, verbose, controls, |s| set_state(State::Ready(s)))
+                    .and_then(|d| {
+                        set_state(State::Ready(Status::Idle));
+                        d.wait()
+                    });
+                if let Err(e) = result {
+                    eprintln!("{e:#}");
+                    // Outermost context only: it's the actionable part and has no paths.
+                    set_failed(e.to_string());
+                }
+            })?;
 
         app.run();
         drop(target);

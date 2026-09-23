@@ -1,3 +1,5 @@
+//! Where sayit keeps its data.
+
 use std::path::PathBuf;
 
 /// macOS: ~/Library/Application Support/sayit, Linux: $XDG_DATA_HOME/sayit.

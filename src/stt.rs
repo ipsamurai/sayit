@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use transcribe_rs::onnx::parakeet::{ParakeetModel, ParakeetParams};
 use transcribe_rs::onnx::Quantization;
+use transcribe_rs::onnx::parakeet::{ParakeetModel, ParakeetParams};
 
 use crate::paths;
 
@@ -59,10 +59,13 @@ impl std::str::FromStr for ModelId {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        ModelId::ALL.into_iter().find(|m| m.key() == s).ok_or_else(|| {
-            let keys: Vec<_> = ModelId::ALL.iter().map(|m| m.key()).collect();
-            anyhow::anyhow!("unknown model {s:?} (available: {})", keys.join(", "))
-        })
+        ModelId::ALL
+            .into_iter()
+            .find(|m| m.key() == s)
+            .ok_or_else(|| {
+                let keys: Vec<_> = ModelId::ALL.iter().map(|m| m.key()).collect();
+                anyhow::anyhow!("unknown model {s:?} (available: {})", keys.join(", "))
+            })
     }
 }
 
@@ -90,10 +93,12 @@ pub struct Engine {
 impl Engine {
     pub fn load(id: ModelId) -> Result<Self> {
         let dir = id.dir();
-        // Benchmarked on Apple Silicon: plain CPU beats CoreML (3-5x slower) and XNNPACK (1.5x slower).
+        // Plain CPU is fastest: CoreML was 3-5x and XNNPACK 1.5x slower on Apple Silicon.
         transcribe_rs::accel::set_ort_accelerator(transcribe_rs::accel::OrtAccelerator::CpuOnly);
         let model = match id {
-            ModelId::ParakeetV2 => ParakeetModel::load(&dir, &Quantization::Int8).map(Model::Parakeet),
+            ModelId::ParakeetV2 => {
+                ParakeetModel::load(&dir, &Quantization::Int8).map(Model::Parakeet)
+            }
         }
         .with_context(|| format!("loading {} from {}", id.key(), dir.display()))?;
         Ok(Self { id, model })
@@ -127,6 +132,11 @@ mod tests {
         }
         assert!("whisper".parse::<ModelId>().is_err());
         // Removed or unknown models fall back to the default.
-        assert_eq!(toml::from_str::<C>("model = \"cohere\"").unwrap().model, ModelId::DEFAULT);
+        assert_eq!(
+            toml::from_str::<C>("model = \"no-such-model\"")
+                .unwrap()
+                .model,
+            ModelId::DEFAULT
+        );
     }
 }

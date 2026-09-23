@@ -1,3 +1,5 @@
+//! User settings, stored as TOML in the platform config directory.
+
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -56,7 +58,10 @@ impl Default for Config {
 }
 
 pub fn path() -> PathBuf {
-    dirs::config_dir().expect("no config dir").join("sayit").join("config.toml")
+    dirs::config_dir()
+        .expect("no config dir")
+        .join("sayit")
+        .join("config.toml")
 }
 
 impl Config {

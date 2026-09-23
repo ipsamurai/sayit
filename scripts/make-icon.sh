@@ -25,6 +25,4 @@ for s in 16 32 128 256 512; do
 done
 mkdir -p assets
 iconutil -c icns "$ICONSET" -o assets/AppIcon.icns
-# PREVIEW=path.png keeps the 1024 px render for a look.
-[[ -n "${PREVIEW:-}" ]] && cp "$WORK/icon-1024.png" "$PREVIEW"
 echo "Wrote assets/AppIcon.icns"

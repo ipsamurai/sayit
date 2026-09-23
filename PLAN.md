@@ -15,7 +15,7 @@ handy-keys (CGEventTap / evdev) ─► controller ─► cpal mic (open only whi
                                worker: trim silence → Parakeet TDT 0.6B v2 (ONNX int8, CPU)
                                          │
                                          ▼
-                               text rules (P4) → vault (P3) → injector
+                               filler removal (P4) → vault (P3) → injector (+ line break)
                                                       macOS: NSPasteboard + CGEvent Cmd+V
                                                       Linux: arboard + uinput Ctrl+V
 ```
@@ -50,10 +50,13 @@ Models with more restrictive terms, such as the NVIDIA Open Model License or non
     - Linux: the DEK is wrapped with a key derived from `HKDF(Argon2id(PIN, salt) ‖ secret-service secret)`. The secret sits in GNOME Keyring or KWallet, so a stolen `vault.bin` can't be brute-forced offline without the unlocked login keyring.
   - The vault locks again after N idle minutes. Plaintext is held in `Zeroizing` buffers, and 5 wrong PINs trigger an exponential backoff.
   - A `sayit history` CLI shows entries and can copy one, marked concealed. The tray menu gets a history view in P5.
-- [ ] **P4 Text cleanup:** remove filler words (um, uh), apply a personal dictionary and replacements, voice commands ("new line", "new paragraph"), smart spacing and capitalization based on the text around the cursor.
+- [~] **P4 Text cleanup:**
+  - *Done:* filler words (um, uh, erm) are removed, and each take ends with a line break (`newline_after_take`).
+  - *Dropped:* voice commands ("new line") and context-aware spacing, which would mean reading other apps' text or processes. They risk false triggers, and the privacy cost outweighs the benefit.
+  - *Last:* a personal dictionary. It's deferred because replacements can misfire on similar-sounding phrases, and the model already handles most words.
 - [~] **P5 Tray and overlay:** *Done on macOS:* menu-bar icon for loading, idle, listening, transcribing, paused and error; Pause, Microphone picker, Model picker (shown when there is more than one model) and Quit. *Still to do:* floating "listening" pill, history view, and the Linux tray.
 - [ ] **P6 Optional LLM cleanup:** Qwen3-1.7B Q4 through llama.cpp with Metal, toggled per use. It adds about 1.1 GB of RAM and 0.3–1 s per dictation.
-- [~] **P7 Packaging:** *Done:* macOS `.app` (menu-bar only, ad-hoc signed, own permissions), app icon, drag-to-install `.dmg`. *Still to do:* start at login, an optional stable local signing identity so permissions survive rebuilds, and on Linux an AppImage or `.deb`, a udev `uaccess` rule and a systemd user unit.
+- [~] **P7 Packaging:** *Done:* macOS `.app` (menu-bar only, ad-hoc signed with the Hardened Runtime, own permissions), app icon, drag-to-install `.dmg`. *Still to do:* start at login, an optional stable local signing identity so permissions survive rebuilds, and on Linux an AppImage or `.deb`, a udev `uaccess` rule and a systemd user unit.
 
 ## Known limitations
 - Clipboard restore on Linux keeps plain text only. On macOS all pasteboard types are kept.
