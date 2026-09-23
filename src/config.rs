@@ -38,17 +38,15 @@ pub struct Config {
     pub mode: Mode,
     /// Speech model. Currently only "parakeet-v2"; see scripts/fetch-models.sh.
     pub model: ModelId,
-    /// Put the previous clipboard contents back after pasting.
-    pub restore_clipboard: bool,
     /// Drop hesitation sounds ("um", "uh", "erm") from transcripts.
     pub remove_fillers: bool,
     /// End each take with a line break (otherwise a space).
     pub newline_after_take: bool,
-    /// Keep the last few dictations in memory for the menu bar's Recent
-    /// Dictations. Never written to disk. Off unless the user turns it on
+    /// Keep the last few dictations in memory for the menu bar's Clipboard
+    /// menu. Never written to disk. Off unless the user turns it on
     /// (PRIVACY.md promises that).
     pub keep_history: bool,
-    /// How many to keep (1 to 10).
+    /// How many dictations to keep (1 to 10).
     pub history_size: usize,
     /// Free the model's ~1 GB of RAM after this many idle minutes (0 = never).
     /// Reloading takes under a second.
@@ -71,7 +69,6 @@ impl Default for Config {
             hotkey: "OptRight".into(),
             mode: Mode::Hold,
             model: ModelId::DEFAULT,
-            restore_clipboard: true,
             remove_fillers: true,
             newline_after_take: true,
             keep_history: false,

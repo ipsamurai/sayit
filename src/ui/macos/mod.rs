@@ -35,7 +35,7 @@ use crate::stt::ModelId;
 
 const MIC_MENU: &str = "Microphone";
 const MODEL_MENU: &str = "Model";
-const RECENT_MENU: &str = "Recent Dictations";
+const RECENT_MENU: &str = "Clipboard";
 
 /// Longest menu title for a recent dictation; the tooltip shows more.
 const RECENT_TITLE_CHARS: usize = 60;
@@ -440,7 +440,7 @@ fn fill_recent_menu(actions: &Actions, menu: &NSMenu, shown: &[String]) {
     if !actions.controls().keep_history.load(Ordering::Relaxed) {
         menu.addItem(&menu_item(
             mtm,
-            "Turned off in Settings › Clipboard",
+            "Off: turn on in Settings › Clipboard",
             None,
             "",
         ));
@@ -467,7 +467,7 @@ fn fill_recent_menu(actions: &Actions, menu: &NSMenu, shown: &[String]) {
         menu.addItem(&item);
     }
     menu.addItem(&NSMenuItem::separatorItem(mtm));
-    let clear = menu_item(mtm, "Clear Recent", Some(sel!(clearRecent:)), "");
+    let clear = menu_item(mtm, "Clear", Some(sel!(clearRecent:)), "");
     // SAFETY: as above.
     unsafe { clear.setTarget(Some(actions as &AnyObject)) };
     menu.addItem(&clear);

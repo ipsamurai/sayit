@@ -49,7 +49,7 @@ pub struct Ivars {
     progress: Cell<f64>,
     last_error: RefCell<Option<(ModelId, String)>>,
     on_close: Cell<OnClose>,
-    /// The dictations listed in the Recent Dictations menu when it opened.
+    /// The dictations listed in the Clipboard menu when it opened.
     recent_shown: RefCell<Vec<String>>,
 }
 

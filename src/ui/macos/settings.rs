@@ -30,34 +30,33 @@ use crate::stt::ModelId;
 pub enum Toggle {
     RemoveFillers,
     NewlineAfterTake,
-    RestoreClipboard,
     KeepHistory,
 }
 
 impl Toggle {
-    pub const ALL: [Toggle; 4] = [
+    pub const ALL: [Toggle; 3] = [
         Toggle::RemoveFillers,
         Toggle::NewlineAfterTake,
-        Toggle::RestoreClipboard,
         Toggle::KeepHistory,
     ];
 
     pub fn title(self) -> &'static str {
         match self {
-            Toggle::RemoveFillers => "Remove filler words",
-            Toggle::NewlineAfterTake => "Start each dictation on a new line",
-            Toggle::RestoreClipboard => "Restore my clipboard after pasting",
-            Toggle::KeepHistory => "Keep recent dictations",
+            Toggle::RemoveFillers => "Remove fillers",
+            Toggle::NewlineAfterTake => "New line",
+            Toggle::KeepHistory => "Clipboard history",
         }
     }
 
     pub fn explanation(self) -> &'static str {
         match self {
-            Toggle::RemoveFillers => "Drops \"um\", \"uh\" and \"erm\".",
-            Toggle::NewlineAfterTake => "Off adds a space instead. Turn off for terminals.",
-            Toggle::RestoreClipboard => "Puts back what you had copied before dictating.",
+            Toggle::RemoveFillers => "Drops \"um\", \"uh\" and \"erm\" from what you say.",
+            Toggle::NewlineAfterTake => {
+                "Starts each dictation on a new line. Off adds a space instead; turn it off for terminals."
+            }
             Toggle::KeepHistory => {
-                "Copy them again from the menu bar. Kept in memory only, gone when sayit quits."
+                "Your last few dictations in the menu bar's Clipboard menu, to copy again. \
+                 Kept in memory only, gone when sayit quits."
             }
         }
     }
@@ -67,7 +66,6 @@ impl Toggle {
         match self {
             Toggle::RemoveFillers => &controls.remove_fillers,
             Toggle::NewlineAfterTake => &controls.newline_after_take,
-            Toggle::RestoreClipboard => &controls.restore_clipboard,
             Toggle::KeepHistory => &controls.keep_history,
         }
     }
@@ -77,7 +75,6 @@ impl Toggle {
         match self {
             Toggle::RemoveFillers => &mut cfg.remove_fillers,
             Toggle::NewlineAfterTake => &mut cfg.newline_after_take,
-            Toggle::RestoreClipboard => &mut cfg.restore_clipboard,
             Toggle::KeepHistory => &mut cfg.keep_history,
         }
     }
@@ -248,7 +245,7 @@ impl SettingsWindow {
         let text = match login {
             Login::Unavailable => "Works in the installed sayit.app, not when run from a terminal.",
             Login::NeedsApproval => "Allow sayit in System Settings › General › Login Items.",
-            Login::On | Login::Off => "Opens sayit in the menu bar when you log in.",
+            Login::On | Login::Off => "Opens sayit in the menu bar when you log in to your Mac.",
         };
         self.login_note.setStringValue(&NSString::from_str(text));
         self.login_switch.setState(check_state(matches!(
@@ -283,7 +280,7 @@ fn general_pane(
     let login = card_row(
         mtm,
         None,
-        &label(mtm, "Start sayit at login"),
+        &label(mtm, "Autostart"),
         &login_note,
         Some(&login_switch),
         CARD_INNER,
@@ -300,10 +297,10 @@ fn general_pane(
     let closing = card_row(
         mtm,
         None,
-        &label(mtm, "When Settings is closed"),
+        &label(mtm, "On close"),
         &note(
             mtm,
-            "Unless you choose Quit, your hotkey keeps working.",
+            "What closing this window does. Unless you choose Quit, your hotkey keeps working.",
             CARD_INNER - 250.0,
         ),
         Some(&choice),
@@ -510,14 +507,14 @@ fn text_pane(
     pane(mtm, &[&intro, &rows_card(mtm, &refs, PANE_WIDTH)])
 }
 
-/// Restoring the clipboard, and the recent dictations in the menu bar.
+/// The recent dictations in the menu bar's Clipboard menu.
 fn clipboard_pane(
     mtm: MainThreadMarker,
     target: &AnyObject,
     controls: &Controls,
     cfg: &Config,
 ) -> Retained<NSStackView> {
-    let toggles = [Toggle::RestoreClipboard, Toggle::KeepHistory];
+    let toggles = [Toggle::KeepHistory];
     let mut rows = toggle_rows(mtm, target, controls, &toggles);
     let titles = HISTORY_SIZES.map(|n| n.to_string());
     let titles: Vec<&str> = titles.iter().map(String::as_str).collect();
@@ -529,15 +526,19 @@ fn clipboard_pane(
     rows.push(card_row(
         mtm,
         None,
-        &label(mtm, "How many to keep"),
-        &note(mtm, "The oldest drops off first.", CARD_INNER - 120.0),
+        &label(mtm, "Keep last"),
+        &note(
+            mtm,
+            "How many dictations to keep. The oldest drops off first.",
+            CARD_INNER - 120.0,
+        ),
         Some(&size),
         CARD_INNER,
     ));
     let refs: Vec<&NSView> = rows.iter().map(|r| -> &NSView { r }).collect();
     let intro = note(
         mtm,
-        "Menu bar › Recent Dictations: click one to copy it.",
+        "Menu bar › Clipboard: click a dictation to copy it.",
         PANE_WIDTH,
     );
     pane(mtm, &[&intro, &rows_card(mtm, &refs, PANE_WIDTH)])

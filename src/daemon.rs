@@ -87,7 +87,6 @@ pub struct Controls {
     pub model: Mutex<ModelId>,
     pub remove_fillers: AtomicBool,
     pub newline_after_take: AtomicBool,
-    pub restore_clipboard: AtomicBool,
     pub keep_history: AtomicBool,
     history_size: AtomicUsize,
     /// Recent dictations, newest first, for copying again. Memory only: never
@@ -107,7 +106,6 @@ impl Controls {
             model: Mutex::new(cfg.model),
             remove_fillers: AtomicBool::new(cfg.remove_fillers),
             newline_after_take: AtomicBool::new(cfg.newline_after_take),
-            restore_clipboard: AtomicBool::new(cfg.restore_clipboard),
             keep_history: AtomicBool::new(cfg.keep_history),
             history_size: AtomicUsize::new(cfg.history_size.clamp(1, MAX_HISTORY)),
             history: Mutex::new(VecDeque::new()),
@@ -486,7 +484,7 @@ fn transcribe_and_paste(
     } else {
         format!("{text} ")
     };
-    if let Err(e) = injector.paste(&pasted, controls.restore_clipboard.load(Ordering::Relaxed)) {
+    if let Err(e) = injector.paste(&pasted) {
         eprintln!("paste failed: {e:#}");
     }
     if verbose {

@@ -41,13 +41,9 @@ mod platform {
             Ok(Self)
         }
 
-        pub fn paste(&mut self, text: &str, restore_clipboard: bool) -> Result<()> {
+        pub fn paste(&mut self, text: &str) -> Result<()> {
             let pb = NSPasteboard::generalPasteboard();
-            let saved = if restore_clipboard {
-                save(&pb)
-            } else {
-                Vec::new()
-            };
+            let saved = save(&pb);
 
             pb.clearContents();
             let item = NSPasteboardItem::new();
@@ -61,23 +57,21 @@ mod platform {
 
             send_cmd_v();
 
-            if restore_clipboard {
-                std::thread::sleep(RESTORE_DELAY);
-                // Only restore if nothing else touched the clipboard meanwhile.
-                if pb.changeCount() == ours {
-                    pb.clearContents();
-                    let items = saved
-                        .into_iter()
-                        .map(|types| {
-                            let it = NSPasteboardItem::new();
-                            for (t, d) in types {
-                                it.setData_forType(&d, &t);
-                            }
-                            it
-                        })
-                        .collect();
-                    write(&pb, items);
-                }
+            std::thread::sleep(RESTORE_DELAY);
+            // Only restore if nothing else touched the clipboard meanwhile.
+            if pb.changeCount() == ours {
+                pb.clearContents();
+                let items = saved
+                    .into_iter()
+                    .map(|types| {
+                        let it = NSPasteboardItem::new();
+                        for (t, d) in types {
+                            it.setData_forType(&d, &t);
+                        }
+                        it
+                    })
+                    .collect();
+                write(&pb, items);
             }
             Ok(())
         }
@@ -165,12 +159,8 @@ mod platform {
             Ok(Self { kbd, clipboard })
         }
 
-        pub fn paste(&mut self, text: &str, restore_clipboard: bool) -> Result<()> {
-            let saved = if restore_clipboard {
-                self.clipboard.get_text().ok()
-            } else {
-                None
-            };
+        pub fn paste(&mut self, text: &str) -> Result<()> {
+            let saved = self.clipboard.get_text().ok();
             self.clipboard.set_text(text)?;
             std::thread::sleep(Duration::from_millis(30));
 

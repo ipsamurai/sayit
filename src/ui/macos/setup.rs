@@ -570,7 +570,7 @@ pub fn hotkey_card(
     let mode_row = card_row(
         mtm,
         None,
-        &semibold(mtm, "How it works"),
+        &semibold(mtm, "Mode"),
         &note(
             mtm,
             "Hold: speak while held. Toggle: press to start and stop.",

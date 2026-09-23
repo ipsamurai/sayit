@@ -18,7 +18,7 @@ sayit also asks macOS every 2 seconds whether it still has its two permissions, 
 - **Audio:** held in memory only while you hold the hotkey, then discarded.
 - **What you dictate:** it's pasted into your app and then forgotten. It's never written to disk or to logs, and it's printed only if you run `sayit` with `-v` in your own terminal.
 
-**Recent dictations (off unless you turn it on):** with **Keep recent dictations** on (in setup or Settings › Clipboard), sayit keeps your last 3, 5 or 10 dictations **in memory only**, so you can copy one again from the menu bar. They're never written to disk or logs. They're gone when sayit quits, when you choose **Clear Recent**, or when you turn the option off. Clicking one copies it to the clipboard like a normal copy, so a clipboard manager may record that copy.
+**Clipboard history (off unless you turn it on):** with **Clipboard history** on (in setup or Settings › Clipboard), sayit keeps your last 3, 5 or 10 dictations **in memory only**, so you can copy one again from the menu bar's **Clipboard** menu. They're never written to disk or logs. They're gone when sayit quits, when you choose **Clear**, or when you turn the option off. Clicking one copies it to the clipboard like a normal copy, so a clipboard manager may record that copy.
 
 If a future feature stores anything else, it will be off by default and documented here first.
 
