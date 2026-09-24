@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds target/release/sayit.app: the release binary, Info.plist, icon, the
-# model download script and the third-party license notices, ad-hoc signed. Needs no admin rights and writes
-# only inside target/. Models are not bundled: the app downloads them during
+# model download script and the third-party license notices, ad-hoc signed.
+# Needs no admin rights and writes only inside target/. Models are not bundled: the app downloads them during
 # setup into ~/Library/Application Support/sayit.
 set -euo pipefail
 

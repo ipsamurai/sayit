@@ -51,7 +51,7 @@ Test the DMG you're about to upload, not a build run from a terminal:
 ## 6. Commit and tag
 
 ```sh
-git add Cargo.toml Cargo.lock CHANGELOG.md
+git add Cargo.toml Cargo.lock CHANGELOG.md README.md
 git commit -m "Release X.Y.Z"
 git tag -a vX.Y.Z -m "sayit X.Y.Z"
 git push origin main vX.Y.Z
