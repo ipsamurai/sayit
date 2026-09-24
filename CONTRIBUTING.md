@@ -26,6 +26,8 @@ During development, run the menu-bar app from a terminal. The terminal's Accessi
 
 Linux changes are very welcome. That code path has never been run, so please say what you tested it on.
 
+**Porting to another platform** (such as Windows): keep the platform's code behind `#[cfg(target_os = "...")]` in its own functions or modules, the way the macOS and Linux code is split in `src/inject.rs`, `src/daemon.rs` and `src/ui/`, so it never changes how the other platforms build. The ground rules above apply unchanged. Open an issue first to agree on the approach, then send the work in small PRs.
+
 ## Before a release
 
 Follow the step-by-step checklist in [RELEASING.md](RELEASING.md). In short:

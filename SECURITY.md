@@ -39,4 +39,5 @@ What sayit does by design:
 Before each release:
 - `cargo audit` checks every dependency against the RustSec advisory database;
 - `cargo clippy` runs with `undocumented_unsafe_blocks`, so every `unsafe` block carries a `// SAFETY:` comment;
-- the code is checked for network access with `cargo tree -e normal`.
+- the code is checked for network access with `cargo tree -e normal`;
+- the DMG is published with its SHA-256 checksum, so you can check that your download wasn't altered.

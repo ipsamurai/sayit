@@ -31,10 +31,17 @@
 - About 1 GB of free disk space for the speech model and the app
 - **To build:** [Rust](https://rustup.rs) (stable) and the Xcode command-line tools (`xcode-select --install`)
 
-sayit is currently distributed as source code. You build it yourself, which takes about two minutes.
+Download the ready-made app from the [latest release](https://github.com/ipsamurai/sayit/releases/latest), or build it yourself from source, which takes about two minutes.
 
 ## Quick start (macOS)
 
+### Download
+1. From the [latest release](https://github.com/ipsamurai/sayit/releases/latest), download `sayit-<version>.dmg` and `sayit-<version>.dmg.sha256`.
+2. Optional: check the download. In the folder you saved both files to, `shasum -a 256 -c sayit-*.dmg.sha256` should print `OK`.
+3. Open the DMG and drag **sayit** into **Applications**.
+4. Open sayit. It's ad-hoc signed, not notarized by Apple, so macOS blocks the first launch. Go to System Settings › Privacy & Security and click **Open Anyway**. On macOS 14 and earlier, you can instead right-click the app and choose **Open**. You only need to do this once.
+
+### Or build it yourself
 ```sh
 git clone https://github.com/ipsamurai/sayit.git
 cd sayit
@@ -42,13 +49,13 @@ cd sayit
 open target/release/sayit-*.dmg
 ```
 
-1. Drag **sayit** into **Applications** and open it.
-2. The **setup assistant** walks you through choosing and downloading a speech model, allowing **Accessibility** and **Microphone** access (with a live green/red checklist), picking your microphone and hotkey, and the text options.
-3. Click into any text field, **hold Right Option** (or your chosen key), and speak. Release, and the text appears.
+Drag **sayit** into **Applications** and open it. An app you built on your own Mac opens without the Gatekeeper warning.
+
+### First launch
+1. The **setup assistant** walks you through choosing and downloading a speech model, allowing **Accessibility** and **Microphone** access (with a live green/red checklist), picking your microphone and hotkey, and the text options.
+2. Click into any text field, **hold Right Option** (or your chosen key), and speak. Release, and the text appears.
 
 When setup is finished, a microphone icon appears in the menu bar. sayit has no Dock icon unless you choose one in Settings › General. Closing setup partway quits sayit, and setup starts again next time.
-
-The app is ad-hoc signed, not notarized by Apple. On the Mac that built it, it opens normally. If you copy it to another Mac, Gatekeeper blocks the first launch: right-click the app and choose **Open**.
 
 ## Using sayit
 
@@ -99,9 +106,12 @@ Restart sayit after editing the file by hand.
 ## Updating and uninstalling
 
 **Update:**
-1. Run `git pull` and then `./scripts/package-dmg.sh`.
-2. Replace the app in Applications with the new one.
-3. The new build counts as a different app to macOS, so run `tccutil reset Accessibility io.github.ipsamurai.sayit` and allow it again when prompted.
+1. Quit sayit (menu bar › **Quit sayit**).
+2. Get the new version: download the DMG from the [latest release](https://github.com/ipsamurai/sayit/releases/latest), or run `git pull` and then `./scripts/package-dmg.sh`.
+3. Open the DMG and drag **sayit** into **Applications**, choosing **Replace**.
+4. The new build counts as a different app to macOS, so run `tccutil reset Accessibility io.github.ipsamurai.sayit`, open sayit, and allow it again when prompted.
+
+Your settings and downloaded models are kept.
 
 **Uninstall** (if you turned on **Autostart**, turn it off in Settings › General first):
 ```sh
