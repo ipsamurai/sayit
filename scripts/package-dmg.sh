@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Builds target/release/sayit-<version>.dmg: sayit.app plus an Applications
-# shortcut for drag-to-install. Needs no admin rights; writes only inside target/.
+# shortcut for drag-to-install, and sayit-<version>.dmg.sha256 next to it so a
+# download can be checked with `shasum -a 256 -c`. Needs no admin rights;
+# writes only inside target/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -16,4 +18,8 @@ ln -s /Applications "$STAGE/Applications"
 
 hdiutil create -quiet -volname "sayit" -srcfolder "$STAGE" -format UDZO -ov "$DMG"
 hdiutil verify -quiet "$DMG"
+# Relative file name inside the checksum file, so `shasum -c` works wherever
+# both files are downloaded to.
+(cd target/release && shasum -a 256 "sayit-$VERSION.dmg" > "sayit-$VERSION.dmg.sha256")
 echo "Built $DMG ($(du -h "$DMG" | cut -f1))"
+cat "$DMG.sha256"

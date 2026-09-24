@@ -28,8 +28,11 @@ Linux changes are very welcome. That code path has never been run, so please say
 
 ## Before a release
 
+Follow the step-by-step checklist in [RELEASING.md](RELEASING.md). In short:
+
 - Run `cargo audit` (install it with `cargo install cargo-audit`), `cargo clippy --all-targets` and `cargo test`. All must be clean.
 - Update `CHANGELOG.md` and the version in `Cargo.toml`.
+- Publish the DMG's SHA-256 checksum next to it. `scripts/package-dmg.sh` writes it as `sayit-<version>.dmg.sha256`.
 - **If you publish a binary**, such as a DMG attached to a GitHub Release, it must carry the license notices of everything compiled into it (the MIT and Apache-2.0 licenses require this). `scripts/bundle-macos.sh` does this for you: it runs `scripts/third-party-notices.py`, which lists every bundled Rust crate with its license text, plus ONNX Runtime and its own notices from `assets/licenses/`. The app contains the result as `Contents/Resources/THIRD-PARTY-NOTICES.txt`. If `ort-sys` is upgraded, the script stops until the ONNX Runtime notices are refreshed. Never bundle the speech model; users download it with `fetch-models.sh`.
 
 ## Pull requests
