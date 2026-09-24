@@ -42,4 +42,5 @@ Follow the step-by-step checklist in [RELEASING.md](RELEASING.md). In short:
 - Keep each PR focused on one change, and say how you tested it: which OS, which apps you dictated into, and any timings.
 - Match the style of the surrounding code: short doc comments that explain *why*, and no extra abstraction layers.
 - `unsafe` code needs a `// SAFETY:` comment explaining why it's sound.
+- AI-assisted changes are welcome, but you must understand and test everything you submit, and say that an AI tool helped. See [AI_POLICY.md](AI_POLICY.md).
 - By submitting a contribution, you agree that it's dual licensed under MIT OR Apache-2.0 (see README).

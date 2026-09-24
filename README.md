@@ -182,6 +182,8 @@ The benchmark behind these ratings is in [PLAN.md](PLAN.md#model-choice-entry-le
 
 Contributions are welcome, especially testing on Linux. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md), and the roadmap is in [PLAN.md](PLAN.md).
 
+sayit is developed with the help of AI coding tools, and AI-assisted pull requests are welcome; see [AI_POLICY.md](AI_POLICY.md). Coding agents can start from [AGENTS.md](AGENTS.md).
+
 ## Use, forks and contributions
 
 sayit is free to use, copy, modify and share, for personal or commercial purposes.

@@ -4,6 +4,9 @@ All notable changes to sayit are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+- `AI_POLICY.md` (how AI tools are used in sayit's development and in contributions), `AGENTS.md` (build, test and ground rules for coding agents), `CHECKLIST.md` (documentation status) and `PROMO.md` (listing copy).
+
 ## [0.2.0] - 2026-09-24
 
 ### Added
