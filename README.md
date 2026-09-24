@@ -9,7 +9,7 @@
 - 🪶 **Light.** It runs on the CPU, with no GPU needed. It uses about 1 GB of RAM while the model is loaded and typically takes 0.1–0.3 s per sentence on an entry-level 8 GB laptop.
 - 🖥️ **Menu-bar app** (macOS) with status, pause, microphone and model pickers, optional clipboard history, and a setup assistant.
 
-> **Status: early (0.1).** macOS is supported. The Linux code path (Wayland/X11) is written but has **not been tested yet**. English only for now.
+> **Status: early (0.2).** macOS is supported. The Linux code path (Wayland/X11) is written but has **not been tested yet**. English only for now.
 
 ## Contents
 - [Requirements](#requirements)
